@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sticky Control Counter</title>
+<meta name="theme-color" content="#1c2b2a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root{
+    --ink:#16211f;
+    --panel:#1c2b2a;
+    --panel-2:#233634;
+    --paper:#f4f2ec;
+    --paper-line:#ded9cc;
+    --mint:#7fd9c4;
+    --mint-dim:#3f5f58;
+    --rust:#e8845c;
+    --rust-dim:#8a4f3a;
+    --muted:#9aa8a5;
+    --danger:#d96a5c;
+    --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans);
+    -webkit-tap-highlight-color: transparent;
+  }
+  header{
+    background:var(--panel); color:#eef5f3; padding:22px 18px 20px;
+    border-bottom: 3px solid var(--mint);
+  }
+  header .eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--mint); margin-bottom:6px;
+  }
+  header h1{ margin:0; font-size:22px; font-weight:700; letter-spacing:-0.01em; }
+  header p{ margin:6px 0 0; font-size:13px; color:var(--muted); line-height:1.5; }
+
+  main{ padding:16px; max-width:640px; margin:0 auto; padding-bottom:60px;}
+
+  .card{
+    background:#fff; border:1px solid var(--paper-line); border-radius:10px;
+    padding:16px; margin-bottom:14px;
+  }
+  .card h2{
+    font-size:13px; text-transform:uppercase; letter-spacing:.08em; margin:0 0 12px;
+    color:var(--panel); font-family:var(--mono); font-weight:600;
+  }
+
+  label.field{ display:block; font-size:13px; color:#555; margin-bottom:6px; }
+  select, input[type=number], input[type=text]{
+    font-family:var(--mono); font-size:15px; padding:8px 10px; border-radius:6px;
+    border:1px solid #c9c4b4; background:#fbfaf6; width:100%;
+  }
+  .row{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
+  .row > div{ flex:1; min-width:110px; }
+
+  .status-box{
+    font-size:12px; margin-top:8px; padding:8px 10px; border-radius:6px;
+    font-family:var(--mono);
+  }
+  .status-box.ok{ background:#e8f6f1; color:#1d6b53; }
+  .status-box.warn{ background:#fbf1e6; color:#8a5a1e; }
+
+  button{
+    font-family:var(--sans); font-weight:600; font-size:14px; border:none; border-radius:8px;
+    padding:12px 16px; cursor:pointer; transition:transform .05s ease;
+  }
+  button:active{ transform:scale(0.98); }
+  button.primary{ background:var(--rust); color:#fff; width:100%; font-size:15px; padding:14px; }
+  button.secondary{ background:var(--panel-2); color:#eef5f3; }
+  button.ghost{ background:transparent; color:var(--panel); border:1px solid #c9c4b4; }
+  button.small{ font-size:12.5px; padding:8px 12px; width:auto; }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+
+  input[type=file]{ display:none; }
+  .upload-box{
+    border:2px dashed #c9c4b4; border-radius:10px; padding:22px; text-align:center;
+    color:#777; font-size:13px; cursor:pointer;
+  }
+  .upload-box:active{ background:#f7f5ee; }
+
+  .status-line{
+    font-family:var(--mono); font-size:12.5px; color:var(--panel); margin-top:10px;
+    display:none; align-items:center; gap:8px;
+  }
+  .status-line.show{ display:flex; }
+  .spinner{
+    width:13px; height:13px; border-radius:50%;
+    border:2px solid var(--paper-line); border-top-color:var(--rust);
+    animation:spin .7s linear infinite; flex:none;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  canvas{ max-width:100%; border-radius:8px; display:block; }
+  #overlayWrap{ position:relative; margin-top:10px; }
+  #overlayCanvas.calib-active{ cursor:crosshair; outline:2px solid var(--rust); }
+
+  .metric-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:6px; }
+  .metric{ background:var(--panel); color:#fff; border-radius:8px; padding:12px 14px; }
+  .metric .num{ font-family:var(--mono); font-size:20px; font-weight:700; color:var(--mint); }
+  .metric .lbl{ font-size:10.5px; color:var(--muted); margin-top:2px; text-transform:uppercase; letter-spacing:.05em; }
+
+  table{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:13px; margin-top:8px; }
+  th,td{ text-align:left; padding:7px 6px; border-bottom:1px solid var(--paper-line); }
+  th{ color:#777; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  tr.unreliable td{ color:#b08a3c; background:#fdf8ee; }
+  .tag{ display:inline-block; font-size:10px; padding:2px 6px; border-radius:10px; font-family:var(--sans); font-weight:600; }
+  .tag.ok{ background:#e8f6f1; color:#1d6b53; }
+  .tag.warn{ background:#fbf1e6; color:#8a5a1e; }
+
+  .note{ font-size:12.5px; color:#777; line-height:1.5; margin-top:10px; }
+  .note.warn{ color:#8a5a1e; }
+
+  details{ margin-top:6px; }
+  summary{ cursor:pointer; font-size:13px; color:var(--panel); font-weight:600; }
+
+  .calib-panel{
+    display:none; margin-top:10px; padding:10px; background:#f7f5ee; border-radius:8px;
+  }
+  .calib-panel.show{ display:block; }
+  .calib-panel .row{ margin-top:8px; }
+
+  .btn-pair{ display:flex; gap:8px; margin-top:10px; }
+  .btn-pair button{ flex:1; }
+
+  .install-banner{
+    position:fixed; left:16px; right:16px; bottom:16px; max-width:608px; margin:0 auto;
+    background:var(--panel); color:#fff; border-radius:10px; padding:14px 16px;
+    display:none; align-items:center; gap:12px; box-shadow:0 8px 24px rgba(0,0,0,.25);
+    z-index:50;
+  }
+  .install-banner.show{ display:flex; }
+  .install-banner span{ font-size:13px; flex:1; line-height:1.4; }
+  .install-banner button{ background:var(--mint); color:var(--panel); flex:none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Sticky Control System &middot; APC/OP/TM043</div>
+  <h1>Particle Counter</h1>
+  <p>Scan tape &rarr; klik &rarr; jumlah &amp; ukuran partikel langsung terbaca. Mendukung PDF hasil scan langsung.</p>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2>1. Ukuran Tape Acuan</h2>
+    <p class="note">Sesuai SOP: tape 3M-300LSE dipotong 7.5 &times; 5 cm. Skala dihitung otomatis dari ukuran ini &mdash; ubah kalau tape Bapak beda ukuran.</p>
+    <div class="row">
+      <div>
+        <label class="field">Sisi panjang (mm)</label>
+        <input type="number" id="tapeLong" value="75" min="1">
+      </div>
+      <div>
+        <label class="field">Sisi pendek (mm)</label>
+        <input type="number" id="tapeShort" value="50" min="1">
+      </div>
+    </div>
+    <div id="scaleStatus" class="status-box ok">Skala akan terisi otomatis setelah scan diproses.</div>
+  </div>
+
+  <div class="card">
+    <h2>2. Kalibrasi Noise Scanner (opsional)</h2>
+    <p class="note">Scan kaca kosong + HVS kosong (tanpa tape) sekali, jadi patokan noise dasar. Ulangi kalau kaca baru dibersihkan/scanner beda.</p>
+    <div class="upload-box" id="calibBox"><div id="calibBoxText">Tap untuk upload scan kalibrasi (blank)</div></div>
+    <input type="file" id="calibInput" accept="image/*,application/pdf">
+    <div id="calibStatus" class="note"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. Scan Sample</h2>
+    <p class="note">Terima file JPG/PNG maupun PDF hasil scan langsung (tidak perlu print-screen/PowerPoint lagi).</p>
+    <div class="upload-box" id="uploadBox"><div id="uploadBoxText">Tap untuk pilih file scan / ambil foto</div></div>
+    <input type="file" id="fileInput" accept="image/*,application/pdf" capture="environment">
+    <div class="status-line" id="statusLine"><div class="spinner"></div><span id="statusText">Memproses&hellip;</span></div>
+  </div>
+
+  <div class="card" id="resultsCard" style="display:none;">
+    <h2>Hasil</h2>
+    <div class="metric-grid">
+      <div class="metric"><div class="num" id="metricCount">&mdash;</div><div class="lbl">Count</div></div>
+      <div class="metric"><div class="num" id="metricTotalArea">&mdash;</div><div class="lbl">Total Area (mm&sup2;)</div></div>
+      <div class="metric"><div class="num" id="metricAvgSize">&mdash;</div><div class="lbl">Average Size (mm&sup2;)</div></div>
+      <div class="metric"><div class="num" id="metricPctArea">&mdash;</div><div class="lbl">%Area</div></div>
+    </div>
+
+    <div id="overlayWrap"><canvas id="overlayCanvas"></canvas></div>
+
+    <div class="btn-pair">
+      <button class="ghost small" id="calibManualBtn">Kalibrasi manual (tarik garis)</button>
+    </div>
+    <div class="calib-panel" id="calibPanel">
+      <div class="note">Tap 2 titik di gambar di atas untuk menandai jarak yang diketahui, lalu isi jaraknya.</div>
+      <div class="row">
+        <div>
+          <label class="field">Jarak sebenarnya (mm)</label>
+          <input type="number" id="calibDistanceMm" value="50" min="0.1" step="0.1">
+        </div>
+      </div>
+      <div class="btn-pair">
+        <button class="secondary small" id="calibApplyBtn">Terapkan</button>
+        <button class="ghost small" id="calibCancelBtn">Batal</button>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr><th>Kelas ukuran (ISO)</th><th>Jumlah</th><th></th></tr></thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+
+    <details>
+      <summary>Catatan reliabilitas &amp; yang dikecualikan</summary>
+      <div class="note" id="reliabilityNote"></div>
+    </details>
+
+    <div class="btn-pair" style="margin-top:14px;">
+      <button class="secondary" id="downloadCsvBtn">Unduh Hasil (CSV)</button>
+      <button class="ghost" id="downloadImgBtn">Unduh Gambar</button>
+    </div>
+  </div>
+
+</main>
+
+<div class="install-banner" id="installBanner">
+  <span>Instal aplikasi ini ke layar utama HP supaya bisa dibuka langsung tanpa browser.</span>
+  <button id="installBtn">Instal</button>
+</div>
+
+<script type="module">
+import * as pdfjsLib from './pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./pdf.worker.min.mjs', import.meta.url).href;
+
+/* ============================================================
+   STICKY CONTROL PARTICLE COUNTER
+   Alur: terima scan (JPG/PNG/PDF) -> deteksi area tape (kontur) ->
+   skala otomatis dari ukuran tape yang diketahui (atau kalibrasi
+   manual tarik-garis) -> background lokal -> threshold adaptif ->
+   connected-component labeling -> filter bentuk (lipatan) ->
+   klasifikasi ukuran ISO -> overlay verifikasi visual -> unduh hasil.
+   ============================================================ */
+
+const CALIB_KEY = 'stickyControlBlankCalib';
+const MAX_DIM = 2200; // cap working resolution for performance
+
+// ISO-style size classes (equivalent diameter, um)
+const ISO_BINS = [
+  [15,25],[25,50],[50,100],[100,150],[150,200],[200,400],[400,1000],[1000,Infinity]
+];
+function binLabel(lo,hi){ return hi===Infinity ? `>${lo}\u00b5m` : `${lo}-${hi}\u00b5m`; }
+
+// ================= FILE LOADING (image or PDF) =================
+function loadFileToImage(file){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{ resolve(img); URL.revokeObjectURL(url); };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function drawToWorkingCanvas(img){
+  let w = img.naturalWidth, h = img.naturalHeight;
+  if(Math.max(w,h) > MAX_DIM){
+    const scale = MAX_DIM/Math.max(w,h);
+    w = Math.round(w*scale); h = Math.round(h*scale);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+  ctx.drawImage(img,0,0,w,h);
+  return { canvas, ctx, w, h };
+}
+
+async function renderPdfToCanvas(file, targetLongSide){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  const page = await pdf.getPage(1);
+  const vp1 = page.getViewport({scale:1});
+  const scale = targetLongSide / Math.max(vp1.width, vp1.height);
+  const viewport = page.getViewport({scale});
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+  await page.render({canvasContext: ctx, viewport}).promise;
+  return { canvas, ctx, w: canvas.width, h: canvas.height };
+}
+
+function isPdfFile(file){ return file.type === 'application/pdf' || /\.pdf$/i.test(file.name); }
+
+async function getWorkingCanvas(file){
+  if(isPdfFile(file)) return await renderPdfToCanvas(file, MAX_DIM);
+  const img = await loadFileToImage(file);
+  return drawToWorkingCanvas(img);
+}
+
+// ================= IMAGE PROCESSING HELPERS =================
+function toGray(imgData){
+  const {data,width,height} = imgData;
+  const gray = new Uint8ClampedArray(width*height);
+  for(let i=0,p=0;i<data.length;i+=4,p++){
+    gray[p] = (0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2])|0;
+  }
+  return gray;
+}
+
+function otsuThreshold(gray){
+  const hist = new Array(256).fill(0);
+  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
+  const total = gray.length;
+  let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
+  let sumB=0, wB=0, wF=0, varMax=0, threshold=127;
+  for(let t=0;t<256;t++){
+    wB += hist[t]; if(wB===0) continue;
+    wF = total-wB; if(wF===0) break;
+    sumB += t*hist[t];
+    const mB = sumB/wB, mF=(sum-sumB)/wF;
+    const varBetween = wB*wF*(mB-mF)*(mB-mF);
+    if(varBetween > varMax){ varMax=varBetween; threshold=t; }
+  }
+  return threshold;
+}
+
+// Flood fill from border through "paper" (bright) pixels -> unreached = foreground
+function segmentForeground(gray, w, h, paperThresh){
+  const isPaper = new Uint8Array(w*h);
+  const marginedThresh = paperThresh + 3; // buffer so borderline pixels don't leak background into tape area
+  for(let i=0;i<gray.length;i++) isPaper[i] = gray[i] > marginedThresh ? 1 : 0;
+  const bg = new Uint8Array(w*h);
+  const stack = [];
+  for(let x=0;x<w;x++){ stack.push(x); stack.push((h-1)*w+x); }
+  for(let y=0;y<h;y++){ stack.push(y*w); stack.push(y*w+w-1); }
+  while(stack.length){
+    const idx = stack.pop();
+    if(bg[idx]) continue;
+    if(!isPaper[idx]) continue;
+    bg[idx]=1;
+    const x = idx%w, y=(idx/w)|0;
+    if(x>0) stack.push(idx-1);
+    if(x<w-1) stack.push(idx+1);
+    if(y>0) stack.push(idx-w);
+    if(y<h-1) stack.push(idx+w);
+  }
+  const fg = new Uint8Array(w*h);
+  for(let i=0;i<fg.length;i++) fg[i] = bg[i] ? 0 : 1;
+  return fg;
+}
+
+// largest connected foreground component -> mask + bbox
+function largestForegroundComponent(fg, w, h){
+  const visited = new Uint8Array(w*h);
+  let best = null;
+  const stack = [];
+  for(let start=0; start<w*h; start++){
+    if(!fg[start] || visited[start]) continue;
+    const pixels = [];
+    stack.length=0; stack.push(start); visited[start]=1;
+    let minX=w,maxX=0,minY=h,maxY=0,count=0;
+    while(stack.length){
+      const idx = stack.pop();
+      const x = idx%w, y=(idx/w)|0;
+      pixels.push(idx); count++;
+      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+      if(x>0 && fg[idx-1] && !visited[idx-1]){visited[idx-1]=1; stack.push(idx-1);}
+      if(x<w-1 && fg[idx+1] && !visited[idx+1]){visited[idx+1]=1; stack.push(idx+1);}
+      if(y>0 && fg[idx-w] && !visited[idx-w]){visited[idx-w]=1; stack.push(idx-w);}
+      if(y<h-1 && fg[idx+w] && !visited[idx+w]){visited[idx+w]=1; stack.push(idx+w);}
+    }
+    if(!best || count>best.comp.count){
+      const mask = new Uint8Array(w*h);
+      for(const idx of pixels) mask[idx]=1;
+      best = {mask, comp:{count,minX,maxX,minY,maxY}};
+    }
+  }
+  if(!best || best.comp.count < (w*h*0.01)) return null;
+  return best;
+}
+
+function connectedComponents(mask, w, h){
+  const visited = new Uint8Array(w*h);
+  const comps = [];
+  const stack = [];
+  for(let start=0; start<w*h; start++){
+    if(!mask[start] || visited[start]) continue;
+    let minX=w, maxX=0, minY=h, maxY=0, count=0, sumX=0, sumY=0;
+    stack.length = 0; stack.push(start); visited[start]=1;
+    while(stack.length){
+      const idx = stack.pop();
+      const x = idx%w, y=(idx/w)|0;
+      count++; sumX+=x; sumY+=y;
+      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
+      if(x>0 && mask[idx-1] && !visited[idx-1]){visited[idx-1]=1; stack.push(idx-1);}
+      if(x<w-1 && mask[idx+1] && !visited[idx+1]){visited[idx+1]=1; stack.push(idx+1);}
+      if(y>0 && mask[idx-w] && !visited[idx-w]){visited[idx-w]=1; stack.push(idx-w);}
+      if(y<h-1 && mask[idx+w] && !visited[idx+w]){visited[idx+w]=1; stack.push(idx+w);}
+    }
+    comps.push({count, minX,maxX,minY,maxY, cx:sumX/count, cy:sumY/count});
+  }
+  return comps;
+}
+
+function boxBlur(gray, w, h, radius){
+  const integral = new Float64Array((w+1)*(h+1));
+  for(let y=0;y<h;y++){
+    let rowSum=0;
+    for(let x=0;x<w;x++){
+      rowSum += gray[y*w+x];
+      integral[(y+1)*(w+1)+(x+1)] = integral[y*(w+1)+(x+1)] + rowSum;
+    }
+  }
+  const out = new Float32Array(w*h);
+  for(let y=0;y<h;y++){
+    const y0 = Math.max(0,y-radius), y1 = Math.min(h-1,y+radius);
+    for(let x=0;x<w;x++){
+      const x0 = Math.max(0,x-radius), x1 = Math.min(w-1,x+radius);
+      const area = (x1-x0+1)*(y1-y0+1);
+      const sum = integral[(y1+1)*(w+1)+(x1+1)] - integral[y0*(w+1)+(x1+1)] - integral[(y1+1)*(w+1)+x0] + integral[y0*(w+1)+x0];
+      out[y*w+x] = sum/area;
+    }
+  }
+  return out;
+}
+
+function mean_std(arr, mask){
+  let n=0,sum=0;
+  for(let i=0;i<arr.length;i++){ if(!mask || mask[i]){ sum+=arr[i]; n++; } }
+  const m = n? sum/n : 0;
+  let sq=0;
+  for(let i=0;i<arr.length;i++){ if(!mask || mask[i]){ sq += (arr[i]-m)*(arr[i]-m); } }
+  const sd = n? Math.sqrt(sq/n) : 0;
+  return {mean:m, std:sd, n};
+}
+
+// Erode a binary mask by `radius` (integral-image based): a pixel stays foreground only
+// if its whole square neighborhood is foreground. Used to strip the thin ring of false
+// "particles" that box-blur creates right at the tape/paper boundary (edge bleed).
+function erodeMask(mask, w, h, radius){
+  const integral = new Int32Array((w+1)*(h+1));
+  for(let y=0;y<h;y++){
+    let rowSum=0;
+    for(let x=0;x<w;x++){
+      rowSum += mask[y*w+x];
+      integral[(y+1)*(w+1)+(x+1)] = integral[y*(w+1)+(x+1)] + rowSum;
+    }
+  }
+  const out = new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    const y0=y-radius, y1=y+radius;
+    if(y0<0 || y1>h-1) continue; // too close to image edge -> not foreground-safe
+    for(let x=0;x<w;x++){
+      const x0=x-radius, x1=x+radius;
+      if(x0<0 || x1>w-1) continue;
+      if(!mask[y*w+x]) continue;
+      const area = (x1-x0+1)*(y1-y0+1);
+      const sum = integral[(y1+1)*(w+1)+(x1+1)] - integral[y0*(w+1)+(x1+1)] - integral[(y1+1)*(w+1)+x0] + integral[y0*(w+1)+x0];
+      out[y*w+x] = (sum===area) ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+// ================= SCALE (mm/px) FROM KNOWN TAPE SIZE =================
+function computeScaleFromTape(comp, knownLongMm, knownShortMm){
+  const bboxW = comp.maxX-comp.minX+1, bboxH = comp.maxY-comp.minY+1;
+  const pxLong = Math.max(bboxW,bboxH), pxShort = Math.min(bboxW,bboxH);
+  const mmPerPxA = knownLongMm/pxLong;
+  const mmPerPxB = knownShortMm/pxShort;
+  const mmPerPx = (mmPerPxA+mmPerPxB)/2;
+  const mismatch = Math.abs(mmPerPxA-mmPerPxB)/mmPerPx;
+  return { mmPerPx, mismatch, mmPerPxA, mmPerPxB };
+}
+
+// ================= DOM refs =================
+const tapeLongInput = document.getElementById('tapeLong');
+const tapeShortInput = document.getElementById('tapeShort');
+const scaleStatus = document.getElementById('scaleStatus');
+
+const calibBox = document.getElementById('calibBox');
+const calibInput = document.getElementById('calibInput');
+const calibStatus = document.getElementById('calibStatus');
+
+const uploadBox = document.getElementById('uploadBox');
+const fileInput = document.getElementById('fileInput');
+const statusLine = document.getElementById('statusLine');
+const statusText = document.getElementById('statusText');
+
+const resultsCard = document.getElementById('resultsCard');
+const overlayCanvas = document.getElementById('overlayCanvas');
+const resultsBody = document.getElementById('resultsBody');
+const metricCount = document.getElementById('metricCount');
+const metricTotalArea = document.getElementById('metricTotalArea');
+const metricAvgSize = document.getElementById('metricAvgSize');
+const metricPctArea = document.getElementById('metricPctArea');
+const reliabilityNote = document.getElementById('reliabilityNote');
+
+const calibManualBtn = document.getElementById('calibManualBtn');
+const calibPanel = document.getElementById('calibPanel');
+const calibDistanceMm = document.getElementById('calibDistanceMm');
+const calibApplyBtn = document.getElementById('calibApplyBtn');
+const calibCancelBtn = document.getElementById('calibCancelBtn');
+
+const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+const downloadImgBtn = document.getElementById('downloadImgBtn');
+
+function setStatus(msg){ statusLine.classList.add('show'); statusText.textContent = msg; }
+function clearStatus(){ statusLine.classList.remove('show'); }
+function yieldFrame(){ return new Promise(r=>setTimeout(r,0)); }
+
+// ================= BLANK CALIBRATION =================
+function loadCalib(){ try{ return JSON.parse(localStorage.getItem(CALIB_KEY) || 'null'); }catch(e){ return null; } }
+function renderCalibStatus(){
+  const c = loadCalib();
+  calibStatus.innerHTML = c
+    ? `Kalibrasi tersimpan: baseline noise mean=${c.mean.toFixed(2)}, std=${c.std.toFixed(2)} (${new Date(c.ts).toLocaleDateString('id-ID')})`
+    : 'Belum ada kalibrasi tersimpan &mdash; sistem pakai threshold default.';
+}
+renderCalibStatus();
+
+calibBox.addEventListener('click', ()=> calibInput.click());
+calibInput.addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  calibStatus.textContent = 'Memproses kalibrasi...';
+  await yieldFrame();
+  const {ctx,w,h} = await getWorkingCanvas(file);
+  const imgData = ctx.getImageData(0,0,w,h);
+  const gray = toGray(imgData);
+  const radius = Math.max(3, Math.round(Math.min(w,h)*0.03));
+  const bg = boxBlur(gray, w, h, radius);
+  const diff = new Float32Array(w*h);
+  for(let i=0;i<diff.length;i++) diff[i] = Math.max(0, bg[i]-gray[i]);
+  const stats = mean_std(diff, null);
+  localStorage.setItem(CALIB_KEY, JSON.stringify({mean:stats.mean, std:stats.std, ts:Date.now()}));
+  renderCalibStatus();
+});
+
+// ================= STATE FOR LAST RUN (for manual recalibration + export) =================
+let lastRun = null; // { canvas, w, h, mikaComp, mikaMask, blobsAll (valid+excluded raw px stats), sampleFileName }
+
+// ================= MAIN PROCESSING =================
+uploadBox.addEventListener('click', ()=> fileInput.click());
+
+fileInput.addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  resultsCard.style.display='none';
+  exitCalibMode();
+  setStatus(isPdfFile(file) ? 'Membaca PDF...' : 'Membaca gambar...');
+  await yieldFrame();
+
+  let working;
+  try{
+    working = await getWorkingCanvas(file);
+  }catch(err){
+    clearStatus();
+    alert('Gagal membaca file. Pastikan file scan (JPG/PNG/PDF) valid.');
+    return;
+  }
+  const {canvas, ctx, w, h} = working;
+
+  setStatus('Mendeteksi area tape...');
+  await yieldFrame();
+
+  const imgData = ctx.getImageData(0,0,w,h);
+  const gray = toGray(imgData);
+  const paperThresh = otsuThreshold(gray);
+  const fgMask = segmentForeground(gray, w, h, paperThresh);
+  const found = largestForegroundComponent(fgMask, w, h);
+  if(!found){
+    clearStatus();
+    alert('Area tape tidak terdeteksi. Pastikan tape terlihat kontras dengan kertas HVS di scan.');
+    return;
+  }
+  const { mask: mikaMask, comp: mikaComp } = found;
+
+  const knownLong = parseFloat(tapeLongInput.value) || 75;
+  const knownShort = parseFloat(tapeShortInput.value) || 50;
+  const scaleInfo = computeScaleFromTape(mikaComp, knownLong, knownShort);
+
+  lastRun = { canvas, w, h, mikaMask, mikaComp, fileName: file.name };
+
+  setStatus('Menghitung background lokal & partikel...');
+  await yieldFrame();
+
+  runDetectionAndRender(scaleInfo.mmPerPx, scaleInfo);
+  clearStatus();
+  resultsCard.style.display = 'block';
+  resultsCard.scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+// Core detection given a mm-per-pixel scale; re-usable for manual recalibration
+function runDetectionAndRender(mmPerPx, scaleInfo){
+  const { canvas, w, h, mikaMask, mikaComp } = lastRun;
+  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+  const imgData = ctx.getImageData(0,0,w,h);
+  const gray = toGray(imgData);
+
+  const umPerPx = mmPerPx*1000;
+  const pxArea_mm2 = mmPerPx*mmPerPx;
+  const pxArea_um2 = umPerPx*umPerPx;
+
+  const radiusPx = Math.max(3, Math.round(0.3/mmPerPx)); // ~300um smoothing window
+  const bg = boxBlur(gray, w, h, radiusPx);
+  const erodedMask = erodeMask(mikaMask, w, h, radiusPx+2); // strip edge-bleed ring near tape boundary
+  const diff = new Float32Array(w*h);
+  for(let i=0;i<diff.length;i++) diff[i] = mikaMask[i] ? Math.max(0, bg[i]-gray[i]) : 0;
+  const stats = mean_std(diff, erodedMask);
+  const calib = loadCalib();
+  let threshVal = stats.mean + 2.2*stats.std;
+  if(calib){ threshVal = Math.max(threshVal, calib.mean + 2.2*calib.std); }
+
+  const particleMask = new Uint8Array(w*h);
+  for(let i=0;i<diff.length;i++) particleMask[i] = (erodedMask[i] && diff[i] > threshVal) ? 1 : 0;
+
+  const blobs = connectedComponents(particleMask, w, h);
+  const minReliableDiam = 2*Math.sqrt(4*pxArea_um2/Math.PI);
+
+  const valid = [];
+  const excludedFold = [];
+  for(const b of blobs){
+    if(b.count < 2) continue;
+    const bboxW = b.maxX-b.minX+1, bboxH = b.maxY-b.minY+1;
+    const elong = Math.max(bboxW,bboxH)/Math.max(1,Math.min(bboxW,bboxH));
+    const diam_um = 2*Math.sqrt(b.count*pxArea_um2/Math.PI);
+    const area_mm2 = b.count*pxArea_mm2;
+    const entry = {...b, diam_um, area_mm2};
+    if(elong > 4 && b.count > 8) excludedFold.push(entry);
+    else valid.push(entry);
+  }
+
+  const binCounts = ISO_BINS.map(()=>0);
+  for(const p of valid){
+    for(let bi=0; bi<ISO_BINS.length; bi++){
+      const [lo,hi] = ISO_BINS[bi];
+      if(p.diam_um>=lo && p.diam_um<hi){ binCounts[bi]++; break; }
+    }
+  }
+
+  const mikaArea_mm2 = mikaComp.count * pxArea_mm2;
+  const mikaArea_cm2 = mikaArea_mm2/100;
+  const totalArea_mm2 = valid.reduce((s,p)=>s+p.area_mm2,0);
+  const avgSize_mm2 = valid.length ? totalArea_mm2/valid.length : 0;
+  const pctArea = mikaArea_mm2 ? (totalArea_mm2/mikaArea_mm2*100) : 0;
+
+  // ---- scale status box ----
+  const scaleOk = scaleInfo.mismatch < 0.15;
+  scaleStatus.className = 'status-box ' + (scaleOk ? 'ok' : 'warn');
+  scaleStatus.innerHTML = `Skala: <b>${mmPerPx.toFixed(4)} mm/px</b> (dari deteksi tape ${(mikaComp.maxX-mikaComp.minX+1)}&times;${(mikaComp.maxY-mikaComp.minY+1)}px)
+    ${scaleOk ? '' : '&mdash; <b>selisih sisi panjang/pendek cukup besar, cek deteksi tape atau pakai kalibrasi manual.</b>'}`;
+
+  // ---- metrics ----
+  metricCount.textContent = valid.length;
+  metricTotalArea.textContent = totalArea_mm2.toFixed(3);
+  metricAvgSize.textContent = avgSize_mm2.toFixed(4);
+  metricPctArea.textContent = pctArea.toFixed(2)+'%';
+
+  // ---- table ----
+  resultsBody.innerHTML = '';
+  for(let bi=0; bi<ISO_BINS.length; bi++){
+    const [lo,hi] = ISO_BINS[bi];
+    const reliable = lo >= minReliableDiam*0.9;
+    const tr = document.createElement('tr');
+    if(!reliable) tr.className='unreliable';
+    tr.innerHTML = `<td>${binLabel(lo,hi)}</td><td>${binCounts[bi]}</td>
+      <td>${reliable ? '<span class="tag ok">reliable</span>' : '<span class="tag warn">di bawah resolusi</span>'}</td>`;
+    resultsBody.appendChild(tr);
+  }
+
+  reliabilityNote.innerHTML = `
+    Resolusi efektif saat ini: 1px \u2248 ${umPerPx.toFixed(1)}\u00b5m &rarr; kelas ukuran di bawah
+    \u2248${minReliableDiam.toFixed(0)}\u00b5m ditandai tidak reliable (bisa campur noise scan).<br><br>
+    Area selebar \u2248${((radiusPx+2)*mmPerPx).toFixed(2)}mm tepat di tepi tape tidak dihitung, untuk menghindari bayangan/gradasi tepi tape terbaca sebagai partikel palsu.<br><br>
+    ${excludedFold.length} objek dikecualikan dari hitungan karena bentuknya memanjang
+    (kemungkinan lipatan/goresan tape, bukan partikel) &mdash; ditandai oranye putus-putus di overlay.<br><br>
+    ${calib ? 'Kalibrasi noise scanner aktif dipakai sebagai batas bawah threshold.' : 'Belum ada kalibrasi blank scanner tersimpan &mdash; pertimbangkan upload scan blank di bagian 2 untuk akurasi lebih baik.'}
+  `;
+
+  drawOverlay(canvas, mikaComp, mikaMask, w, h, valid, excludedFold);
+
+  // stash results for CSV export
+  lastRun.results = {
+    mmPerPx, mikaArea_mm2, mikaArea_cm2, valid, excludedFold, binCounts,
+    totalArea_mm2, avgSize_mm2, pctArea, minReliableDiam
+  };
+}
+
+function drawOverlay(srcCanvas, mikaComp, mikaMask, w, h, valid, excludedFold){
+  overlayCanvas.width = w; overlayCanvas.height = h;
+  const octx = overlayCanvas.getContext('2d');
+  octx.drawImage(srcCanvas,0,0);
+
+  const tintData = octx.getImageData(0,0,w,h);
+  for(let i=0;i<w*h;i++){
+    if(!mikaMask[i]){
+      const p = i*4;
+      tintData.data[p] = tintData.data[p]*0.55 + 255*0.45;
+      tintData.data[p+1] = tintData.data[p+1]*0.55 + 255*0.45;
+      tintData.data[p+2] = tintData.data[p+2]*0.55 + 255*0.45;
+    }
+  }
+  octx.putImageData(tintData,0,0);
+
+  octx.strokeStyle = '#7fd9c4'; octx.lineWidth = Math.max(1, w*0.002);
+  octx.strokeRect(mikaComp.minX, mikaComp.minY, mikaComp.maxX-mikaComp.minX, mikaComp.maxY-mikaComp.minY);
+
+  octx.strokeStyle = '#d9432f'; octx.lineWidth = Math.max(1.2, w*0.0025);
+  for(const b of valid){
+    const r = Math.max(3, Math.max(b.maxX-b.minX,b.maxY-b.minY)/2 + 2);
+    octx.beginPath(); octx.arc(b.cx, b.cy, r, 0, Math.PI*2); octx.stroke();
+  }
+  octx.strokeStyle = '#e8845c'; octx.setLineDash([4,3]);
+  for(const b of excludedFold){
+    octx.strokeRect(b.minX-2, b.minY-2, (b.maxX-b.minX)+4, (b.maxY-b.minY)+4);
+  }
+  octx.setLineDash([]);
+}
+
+// ================= MANUAL LINE CALIBRATION =================
+let calibModeActive = false;
+let calibPoints = [];
+
+function enterCalibMode(){
+  calibModeActive = true; calibPoints = [];
+  overlayCanvas.classList.add('calib-active');
+  calibPanel.classList.remove('show');
+}
+function exitCalibMode(){
+  calibModeActive = false; calibPoints = [];
+  overlayCanvas.classList.remove('calib-active');
+  calibPanel.classList.remove('show');
+}
+calibManualBtn.addEventListener('click', ()=>{
+  if(calibModeActive) exitCalibMode(); else enterCalibMode();
+});
+calibCancelBtn.addEventListener('click', exitCalibMode);
+
+function canvasPointFromEvent(canvas, evt){
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width/rect.width, scaleY = canvas.height/rect.height;
+  const clientX = evt.clientX, clientY = evt.clientY;
+  return { x:(clientX-rect.left)*scaleX, y:(clientY-rect.top)*scaleY };
+}
+
+overlayCanvas.addEventListener('click', (evt)=>{
+  if(!calibModeActive || !lastRun) return;
+  const pt = canvasPointFromEvent(overlayCanvas, evt);
+  calibPoints.push(pt);
+  redrawCalibMarkers();
+  if(calibPoints.length===2){
+    calibPanel.classList.add('show');
+  }
+});
+
+function redrawCalibMarkers(){
+  const { canvas, w, h, mikaComp, mikaMask } = lastRun;
+  const octx = overlayCanvas.getContext('2d');
+  drawOverlay(canvas, mikaComp, mikaMask, w, h,
+    lastRun.results ? lastRun.results.valid : [],
+    lastRun.results ? lastRun.results.excludedFold : []);
+  octx.fillStyle = '#2b6cff';
+  for(const p of calibPoints){
+    octx.beginPath(); octx.arc(p.x,p.y,5,0,Math.PI*2); octx.fill();
+  }
+  if(calibPoints.length===2){
+    octx.strokeStyle = '#2b6cff'; octx.lineWidth = Math.max(1.5, w*0.003);
+    octx.beginPath(); octx.moveTo(calibPoints[0].x,calibPoints[0].y);
+    octx.lineTo(calibPoints[1].x,calibPoints[1].y); octx.stroke();
+  }
+}
+
+calibApplyBtn.addEventListener('click', async ()=>{
+  if(calibPoints.length!==2 || !lastRun) return;
+  const dx = calibPoints[0].x-calibPoints[1].x, dy = calibPoints[0].y-calibPoints[1].y;
+  const pxDist = Math.sqrt(dx*dx+dy*dy);
+  const knownMm = parseFloat(calibDistanceMm.value) || 50;
+  if(pxDist < 2){ alert('Jarak dua titik terlalu dekat, coba lagi.'); return; }
+  const mmPerPx = knownMm/pxDist;
+  setStatus('Menghitung ulang dengan skala manual...');
+  await yieldFrame();
+  runDetectionAndRender(mmPerPx, {mismatch:0});
+  clearStatus();
+  exitCalibMode();
+});
+
+// ================= CSV / IMAGE EXPORT =================
+function buildCsv(){
+  if(!lastRun || !lastRun.results) return '';
+  const r = lastRun.results;
+  const lines = [];
+  lines.push('Sticky Control System - Hasil Pengujian');
+  lines.push(`File,${lastRun.fileName}`);
+  lines.push(`Tanggal proses,${new Date().toLocaleString('id-ID')}`);
+  lines.push(`Skala (mm/px),${r.mmPerPx.toFixed(5)}`);
+  lines.push('');
+  lines.push('Ringkasan (format ImageJ Analyze Particles)');
+  lines.push('Count,Total Area (mm2),Average Size (mm2),%Area,Tape Area (cm2)');
+  lines.push(`${r.valid.length},${r.totalArea_mm2.toFixed(4)},${r.avgSize_mm2.toFixed(5)},${r.pctArea.toFixed(3)},${r.mikaArea_cm2.toFixed(3)}`);
+  lines.push('');
+  lines.push('Klasifikasi Ukuran (ISO)');
+  lines.push('Kelas,Jumlah,Reliabilitas');
+  ISO_BINS.forEach(([lo,hi],i)=>{
+    const reliable = lo >= r.minReliableDiam*0.9;
+    lines.push(`${binLabel(lo,hi)},${r.binCounts[i]},${reliable?'reliable':'di bawah resolusi'}`);
+  });
+  lines.push('');
+  lines.push('Detail Per-Partikel (valid)');
+  lines.push('No,Diameter Ekuivalen (um),Area (mm2)');
+  r.valid.forEach((p,i)=>{
+    lines.push(`${i+1},${p.diam_um.toFixed(1)},${p.area_mm2.toFixed(5)}`);
+  });
+  lines.push('');
+  lines.push(`Objek dikecualikan (kemungkinan lipatan/goresan),${r.excludedFold.length}`);
+  return lines.join('\n');
+}
+
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+downloadCsvBtn.addEventListener('click', ()=>{
+  const csv = buildCsv();
+  if(!csv){ alert('Belum ada hasil untuk diunduh.'); return; }
+  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  downloadBlob(new Blob([csv],{type:'text/csv;charset=utf-8'}), `sticky-count-${stamp}.csv`);
+});
+
+downloadImgBtn.addEventListener('click', ()=>{
+  if(!lastRun) { alert('Belum ada hasil untuk diunduh.'); return; }
+  overlayCanvas.toBlob((blob)=>{
+    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+    downloadBlob(blob, `sticky-count-overlay-${stamp}.png`);
+  }, 'image/png');
+});
+
+// ================= PWA INSTALL PROMPT =================
+let deferredPrompt = null;
+const installBanner = document.getElementById('installBanner');
+const installBtn = document.getElementById('installBtn');
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  installBanner.classList.add('show');
+});
+installBtn.addEventListener('click', async ()=>{
+  if(!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  installBanner.classList.remove('show');
+});
+window.addEventListener('appinstalled', ()=> installBanner.classList.remove('show'));
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
