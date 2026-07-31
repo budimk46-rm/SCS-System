@@ -246,7 +246,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./pdf.worker.min.mjs', import.
    ============================================================ */
 
 const CALIB_KEY = 'stickyControlBlankCalib';
-const MAX_DIM = 2200; // cap working resolution for performance
+const COARSE_DIM = 2000;  // low-res pass: just enough to locate the tape on the page
+const FINE_DIM = 1900;    // high-res pass: rendered/cropped directly around the located tape
 
 // ISO-style size classes (equivalent diameter, um)
 const ISO_BINS = [
@@ -254,7 +255,27 @@ const ISO_BINS = [
 ];
 function binLabel(lo,hi){ return hi===Infinity ? `>${lo}\u00b5m` : `${lo}-${hi}\u00b5m`; }
 
-// ================= FILE LOADING (image or PDF) =================
+// ================= FILE LOADING (image or PDF), two-pass =================
+// A full-page scan (A4 at 600dpi) is far bigger than we can process directly, but the tape
+// itself is usually a small fraction of that page. Downscaling the WHOLE page to a fixed
+// budget (old single-pass approach) starves the tape region of resolution once cropped,
+// which under-counts particles. Instead: locate the tape at low-res first, then re-render/
+// re-crop *just that region* at full target resolution for the actual analysis pass.
+
+function isPdfFile(file){ return file.type === 'application/pdf' || /\.pdf$/i.test(file.name); }
+
+async function loadSource(file){
+  if(isPdfFile(file)){
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    const page = await pdf.getPage(1);
+    const vp1 = page.getViewport({scale:1});
+    return { kind:'pdf', page, origW: vp1.width, origH: vp1.height };
+  }
+  const img = await loadFileToImage(file);
+  return { kind:'image', img, origW: img.naturalWidth, origH: img.naturalHeight };
+}
+
 function loadFileToImage(file){
   return new Promise((resolve,reject)=>{
     const img = new Image();
@@ -265,40 +286,30 @@ function loadFileToImage(file){
   });
 }
 
-function drawToWorkingCanvas(img){
-  let w = img.naturalWidth, h = img.naturalHeight;
-  if(Math.max(w,h) > MAX_DIM){
-    const scale = MAX_DIM/Math.max(w,h);
-    w = Math.round(w*scale); h = Math.round(h*scale);
+// Render `source` at `targetLongSide` px, optionally restricted to cropRect (in the source's
+// own original coordinate units: px for images, PDF points for PDFs). cropRect=null renders
+// the whole frame (used for the coarse locate pass).
+async function renderRegion(source, targetLongSide, cropRect){
+  const rx = cropRect ? cropRect.x : 0;
+  const ry = cropRect ? cropRect.y : 0;
+  const rw = cropRect ? cropRect.w : source.origW;
+  const rh = cropRect ? cropRect.h : source.origH;
+  const scale = targetLongSide / Math.max(rw, rh);
+  const destW = Math.max(1, Math.round(rw*scale));
+  const destH = Math.max(1, Math.round(rh*scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = destW; canvas.height = destH;
+  const ctx = canvas.getContext('2d', {willReadFrequently:true});
+
+  if(source.kind === 'image'){
+    ctx.drawImage(source.img, rx, ry, rw, rh, 0, 0, destW, destH);
+  } else {
+    // Render only the crop region directly (not the full page at high-res) by offsetting the
+    // viewport so page-point (rx,ry) lands at canvas (0,0) -- standard pdf.js tiled-render pattern.
+    const viewport = source.page.getViewport({ scale, offsetX: -rx*scale, offsetY: -ry*scale });
+    await source.page.render({ canvasContext: ctx, viewport }).promise;
   }
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d', {willReadFrequently:true});
-  ctx.drawImage(img,0,0,w,h);
-  return { canvas, ctx, w, h };
-}
-
-async function renderPdfToCanvas(file, targetLongSide){
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-  const page = await pdf.getPage(1);
-  const vp1 = page.getViewport({scale:1});
-  const scale = targetLongSide / Math.max(vp1.width, vp1.height);
-  const viewport = page.getViewport({scale});
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(viewport.width);
-  canvas.height = Math.round(viewport.height);
-  const ctx = canvas.getContext('2d', {willReadFrequently:true});
-  await page.render({canvasContext: ctx, viewport}).promise;
-  return { canvas, ctx, w: canvas.width, h: canvas.height };
-}
-
-function isPdfFile(file){ return file.type === 'application/pdf' || /\.pdf$/i.test(file.name); }
-
-async function getWorkingCanvas(file){
-  if(isPdfFile(file)) return await renderPdfToCanvas(file, MAX_DIM);
-  const img = await loadFileToImage(file);
-  return drawToWorkingCanvas(img);
+  return { canvas, ctx, w: destW, h: destH, scale, cropX: rx, cropY: ry };
 }
 
 // ================= IMAGE PROCESSING HELPERS =================
@@ -401,9 +412,107 @@ function connectedComponents(mask, w, h){
       if(y>0 && mask[idx-w] && !visited[idx-w]){visited[idx-w]=1; stack.push(idx-w);}
       if(y<h-1 && mask[idx+w] && !visited[idx+w]){visited[idx+w]=1; stack.push(idx+w);}
     }
-    comps.push({count, minX,maxX,minY,maxY, cx:sumX/count, cy:sumY/count});
+    comps.push({count, minX,maxX,minY,maxY, cx:sumX/count, cy:sumY/count, seedIdx:start});
   }
   return comps;
+}
+
+// Otsu threshold computed only over pixels where mask is true (used for the inner/tape-vs-PET pass).
+function otsuThresholdMasked(gray, mask){
+  const hist = new Array(256).fill(0);
+  let total = 0;
+  for(let i=0;i<gray.length;i++){ if(mask[i]){ hist[gray[i]]++; total++; } }
+  if(total===0) return 127;
+  let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
+  let sumB=0, wB=0, wF=0, varMax=0, threshold=127;
+  for(let t=0;t<256;t++){
+    wB += hist[t]; if(wB===0) continue;
+    wF = total-wB; if(wF===0) break;
+    sumB += t*hist[t];
+    const mB=sumB/wB, mF=(sum-sumB)/wF;
+    const vb = wB*wF*(mB-mF)*(mB-mF);
+    if(vb>varMax){ varMax=vb; threshold=t; }
+  }
+  return threshold;
+}
+
+// Extract just the one connected component containing seedIdx (guaranteed member pixel) as its own mask.
+function floodFillFrom(mask, w, h, seedIdx){
+  const out = new Uint8Array(w*h);
+  const stack = [seedIdx];
+  out[seedIdx] = 1;
+  while(stack.length){
+    const idx = stack.pop();
+    const x = idx%w, y=(idx/w)|0;
+    if(x>0 && mask[idx-1] && !out[idx-1]){ out[idx-1]=1; stack.push(idx-1); }
+    if(x<w-1 && mask[idx+1] && !out[idx+1]){ out[idx+1]=1; stack.push(idx+1); }
+    if(y>0 && mask[idx-w] && !out[idx-w]){ out[idx-w]=1; stack.push(idx-w); }
+    if(y<h-1 && mask[idx+w] && !out[idx+w]){ out[idx+w]=1; stack.push(idx+w); }
+  }
+  return out;
+}
+
+// Locate the tape. Per SOP the physical stack-up is: white HVS paper > PET plastic sheet
+// (12x6cm, plain) > double-sided tape (7.5x5cm, where stickies actually stick) -- three
+// brightness levels nested inside each other. A single global threshold can only separate
+// "paper" from "everything else", which on a full uncropped scan grabs the whole PET sheet
+// (wrong size/aspect for our known-tape-size calibration). So: find the outer PET-or-tape
+// blob first, then re-threshold *within* it to peel off the (usually plain, lighter) bare
+// PET border and isolate the tape itself. Falls back gracefully when there's no paper margin
+// at all (already-cropped input) or no real inner/outer distinction (nothing to peel).
+function detectTapeRegion(gray, w, h){
+  const paperThresh = otsuThreshold(gray);
+  const fgMask = segmentForeground(gray, w, h, paperThresh);
+  let fgCount = 0; for(let i=0;i<fgMask.length;i++) fgCount += fgMask[i];
+
+  if(fgCount > w*h*0.90){
+    return { found:true, mask:new Uint8Array(w*h).fill(1), comp:{count:w*h,minX:0,maxX:w-1,minY:0,maxY:h-1}, usedFallback:true, usedInner:false };
+  }
+
+  const outer = largestForegroundComponent(fgMask, w, h);
+  if(!outer) return { found:false };
+
+  const t2 = otsuThresholdMasked(gray, outer.mask);
+  const innerCandidate = new Uint8Array(w*h);
+  for(let i=0;i<gray.length;i++) innerCandidate[i] = (outer.mask[i] && gray[i] < t2) ? 1 : 0;
+  const innerComps = connectedComponents(innerCandidate, w, h);
+  let bestInner = null;
+  for(const c of innerComps){ if(!bestInner || c.count>bestInner.count) bestInner = c; }
+
+  // Only trust the inner split if it's a real, meaningfully-smaller sub-region -- not a
+  // degenerate all-or-nothing split (which happens when there's no PET-vs-tape contrast,
+  // e.g. the crop already excludes the PET border).
+  if(bestInner && bestInner.count > outer.comp.count*0.15 && bestInner.count < outer.comp.count*0.85){
+    const innerMask = floodFillFrom(innerCandidate, w, h, bestInner.seedIdx);
+    return { found:true, mask: innerMask, comp: bestInner, usedFallback:false, usedInner:true };
+  }
+  return { found:true, mask: outer.mask, comp: outer.comp, usedFallback:false, usedInner:false };
+}
+// Used for the hysteresis sizing pass: every "high threshold" seed pixel is, by construction,
+// also present in the (more permissive) "low threshold" mask, so looking up a seed's id here
+// always resolves to *some* low-threshold component.
+function labelMask(mask, w, h){
+  const labels = new Int32Array(w*h);
+  const sizes = [0];
+  let nextId = 1;
+  const stack = [];
+  for(let start=0; start<w*h; start++){
+    if(!mask[start] || labels[start]) continue;
+    let count = 0;
+    stack.length = 0; stack.push(start); labels[start] = nextId;
+    while(stack.length){
+      const idx = stack.pop();
+      const x = idx%w, y=(idx/w)|0;
+      count++;
+      if(x>0 && mask[idx-1] && !labels[idx-1]){labels[idx-1]=nextId; stack.push(idx-1);}
+      if(x<w-1 && mask[idx+1] && !labels[idx+1]){labels[idx+1]=nextId; stack.push(idx+1);}
+      if(y>0 && mask[idx-w] && !labels[idx-w]){labels[idx-w]=nextId; stack.push(idx-w);}
+      if(y<h-1 && mask[idx+w] && !labels[idx+w]){labels[idx+w]=nextId; stack.push(idx+w);}
+    }
+    sizes.push(count);
+    nextId++;
+  }
+  return {labels, sizes};
 }
 
 function boxBlur(gray, w, h, radius){
@@ -529,7 +638,8 @@ calibInput.addEventListener('change', async (e)=>{
   if(!file) return;
   calibStatus.textContent = 'Memproses kalibrasi...';
   await yieldFrame();
-  const {ctx,w,h} = await getWorkingCanvas(file);
+  const source = await loadSource(file);
+  const {ctx,w,h} = await renderRegion(source, COARSE_DIM, null);
   const imgData = ctx.getImageData(0,0,w,h);
   const gray = toGray(imgData);
   const radius = Math.max(3, Math.round(Math.min(w,h)*0.03));
@@ -555,46 +665,75 @@ fileInput.addEventListener('change', async (e)=>{
   setStatus(isPdfFile(file) ? 'Membaca PDF...' : 'Membaca gambar...');
   await yieldFrame();
 
-  let working;
+  let source;
   try{
-    working = await getWorkingCanvas(file);
+    source = await loadSource(file);
   }catch(err){
     clearStatus();
     alert('Gagal membaca file. Pastikan file scan (JPG/PNG/PDF) valid.');
     return;
   }
-  const {canvas, ctx, w, h} = working;
 
+  // ---- Pass 1 (coarse): render the whole frame small, just to locate the tape ----
   setStatus('Mendeteksi area tape...');
   await yieldFrame();
-
-  const imgData = ctx.getImageData(0,0,w,h);
-  const gray = toGray(imgData);
-  const paperThresh = otsuThreshold(gray);
-  const fgMask = segmentForeground(gray, w, h, paperThresh);
-  let fgCount = 0; for(let i=0;i<fgMask.length;i++) fgCount += fgMask[i];
-
-  let found;
-  if(fgCount > w*h*0.90){
-    // No white HVS paper border visible in this image (already cropped tight to the tape) ->
-    // the corner-flood-fill approach has nothing to latch onto, so treat the whole frame as tape.
-    const wholeMask = new Uint8Array(w*h).fill(1);
-    found = { mask: wholeMask, comp: {count:w*h, minX:0, maxX:w-1, minY:0, maxY:h-1} };
-  } else {
-    found = largestForegroundComponent(fgMask, w, h);
-  }
-  if(!found){
+  const coarse = await renderRegion(source, COARSE_DIM, null);
+  const coarseGray = toGray(coarse.ctx.getImageData(0,0,coarse.w,coarse.h));
+  const coarseDetect = detectTapeRegion(coarseGray, coarse.w, coarse.h);
+  if(!coarseDetect.found){
     clearStatus();
     alert('Area tape tidak terdeteksi. Pastikan tape terlihat kontras dengan kertas HVS di scan.');
     return;
   }
-  const { mask: mikaMask, comp: mikaComp } = found;
 
+  // ---- Pass 2 (fine): re-render just the located region at full target resolution ----
+  // A full-page scan makes the tape a small fraction of the coarse frame; re-rendering only
+  // that crop (from the original source, not the downscaled coarse canvas) recovers the pixel
+  // density needed for accurate counting -- same as if the tape had been pre-cropped.
+  // The coarse pass already did the (harder) job of telling tape apart from paper/PET sheet;
+  // the fine pass's only job is resolution, so its output is always treated as the tape
+  // directly rather than re-classified from scratch (which risks misfiring on the tighter crop).
+  let working, mikaMask, mikaComp, isFallbackWholeFrame;
+  if(coarseDetect.usedFallback && coarse.scale >= 0.999){
+    // coarse render was already at (or above) native resolution and already just the tape --
+    // re-rendering wouldn't add anything, so reuse it directly.
+    working = coarse;
+    mikaMask = coarseDetect.mask; mikaComp = coarseDetect.comp;
+    isFallbackWholeFrame = true;
+  } else {
+    setStatus('Merender ulang area tape (resolusi tinggi)...');
+    await yieldFrame();
+    const marginPx = Math.round(Math.max(coarseDetect.comp.maxX-coarseDetect.comp.minX, coarseDetect.comp.maxY-coarseDetect.comp.minY) * 0.05);
+    const cropXCoarse = Math.max(0, coarseDetect.comp.minX - marginPx);
+    const cropYCoarse = Math.max(0, coarseDetect.comp.minY - marginPx);
+    const cropX2Coarse = Math.min(coarse.w, coarseDetect.comp.maxX + marginPx);
+    const cropY2Coarse = Math.min(coarse.h, coarseDetect.comp.maxY + marginPx);
+    const cropRectOrig = {
+      x: cropXCoarse / coarse.scale,
+      y: cropYCoarse / coarse.scale,
+      w: (cropX2Coarse - cropXCoarse) / coarse.scale,
+      h: (cropY2Coarse - cropYCoarse) / coarse.scale
+    };
+    let fine;
+    try{
+      fine = await renderRegion(source, FINE_DIM, cropRectOrig);
+    }catch(err){
+      clearStatus();
+      alert('Gagal merender ulang area tape resolusi tinggi. Coba scan/PDF lain, atau file JPG/PNG langsung.');
+      return;
+    }
+    working = fine;
+    mikaMask = new Uint8Array(fine.w*fine.h).fill(1);
+    mikaComp = { count: fine.w*fine.h, minX:0, maxX:fine.w-1, minY:0, maxY:fine.h-1 };
+    isFallbackWholeFrame = true;
+  }
+
+  const { canvas, w, h } = working;
   const knownLong = parseFloat(tapeLongInput.value) || 75;
   const knownShort = parseFloat(tapeShortInput.value) || 50;
   const scaleInfo = computeScaleFromTape(mikaComp, knownLong, knownShort);
 
-  lastRun = { canvas, w, h, mikaMask, mikaComp, fileName: file.name };
+  lastRun = { canvas, w, h, mikaMask, mikaComp, fileName: file.name, isFallbackWholeFrame };
 
   setStatus('Menghitung background lokal & partikel...');
   await yieldFrame();
@@ -607,7 +746,7 @@ fileInput.addEventListener('change', async (e)=>{
 
 // Core detection given a mm-per-pixel scale; re-usable for manual recalibration
 function runDetectionAndRender(mmPerPx, scaleInfo){
-  const { canvas, w, h, mikaMask, mikaComp } = lastRun;
+  const { canvas, w, h, mikaMask, mikaComp, isFallbackWholeFrame } = lastRun;
   const ctx = canvas.getContext('2d', {willReadFrequently:true});
   const imgData = ctx.getImageData(0,0,w,h);
   const gray = toGray(imgData);
@@ -618,31 +757,57 @@ function runDetectionAndRender(mmPerPx, scaleInfo){
 
   const radiusPx = Math.max(3, Math.round(0.3/mmPerPx)); // ~300um smoothing window
   const bg = boxBlur(gray, w, h, radiusPx);
-  const erodedMask = erodeMask(mikaMask, w, h, radiusPx+2); // strip edge-bleed ring near tape boundary
+  // Edge-erosion guards against tape/paper-boundary blur bleed. That artifact doesn't exist when
+  // the whole frame is already just tape (fallback mode) -- eroding there would only shrink the
+  // analysis area and skew the noise baseline for no reason, so skip it in that case.
+  const analysisMask = isFallbackWholeFrame ? mikaMask : erodeMask(mikaMask, w, h, radiusPx+2);
   const diff = new Float32Array(w*h);
   for(let i=0;i<diff.length;i++) diff[i] = mikaMask[i] ? Math.max(0, bg[i]-gray[i]) : 0;
-  const stats = mean_std(diff, erodedMask);
+  const stats = mean_std(diff, analysisMask);
   const calib = loadCalib();
-  let threshVal = stats.mean + 5*stats.std; // calibrated against real sample vs ImageJ reference count
-  if(calib){ threshVal = Math.max(threshVal, calib.mean + 5*calib.std); }
+  let threshHigh = stats.mean + 5*stats.std;      // tight: decides count (avoids noise)
+  let threshLow  = stats.mean + 3.0*stats.std;    // loose: measures true particle extent (area)
+  if(calib){
+    threshHigh = Math.max(threshHigh, calib.mean + 5*calib.std);
+    threshLow  = Math.max(threshLow,  calib.mean + 3.0*calib.std);
+  }
 
   const particleMask = new Uint8Array(w*h);
-  for(let i=0;i<diff.length;i++) particleMask[i] = (erodedMask[i] && diff[i] > threshVal) ? 1 : 0;
+  const particleMaskLow = new Uint8Array(w*h);
+  for(let i=0;i<diff.length;i++){
+    particleMask[i] = (analysisMask[i] && diff[i] > threshHigh) ? 1 : 0;
+    particleMaskLow[i] = (analysisMask[i] && diff[i] > threshLow) ? 1 : 0;
+  }
+  const { labels: lowLabels, sizes: lowSizes } = labelMask(particleMaskLow, w, h);
 
   const blobs = connectedComponents(particleMask, w, h);
   const minReliableDiam = 2*Math.sqrt(4*pxArea_um2/Math.PI);
 
-  const valid = [];
-  const excludedFold = [];
+  // first pass: shape-filter using the tight (high-threshold) blob shape, and tally how many
+  // seeds land in each low-threshold region (needed to split shared/merged regions fairly)
+  const candidates = [];
+  const lowIdUseCount = new Map();
   for(const b of blobs){
     if(b.count < 4) continue;
     const bboxW = b.maxX-b.minX+1, bboxH = b.maxY-b.minY+1;
     const elong = Math.max(bboxW,bboxH)/Math.max(1,Math.min(bboxW,bboxH));
-    const diam_um = 2*Math.sqrt(b.count*pxArea_um2/Math.PI);
-    const area_mm2 = b.count*pxArea_mm2;
-    const entry = {...b, diam_um, area_mm2};
-    if(elong > 4 && b.count > 8) excludedFold.push(entry);
-    else valid.push(entry);
+    const isFold = (elong > 4 && b.count > 8);
+    const lowId = lowLabels[b.seedIdx]; // every high-threshold pixel is by construction also in the low mask
+    if(!isFold && lowId){
+      lowIdUseCount.set(lowId, (lowIdUseCount.get(lowId)||0)+1);
+    }
+    candidates.push({...b, elong, isFold, lowId});
+  }
+
+  const valid = [];
+  const excludedFold = [];
+  for(const c of candidates){
+    if(c.isFold){ excludedFold.push({...c, diam_um:2*Math.sqrt(c.count*pxArea_um2/Math.PI), area_mm2:c.count*pxArea_mm2}); continue; }
+    const sharedBy = lowIdUseCount.get(c.lowId) || 1;
+    const grownAreaPx = c.lowId ? (lowSizes[c.lowId]/sharedBy) : c.count; // split fairly if particles merge under the loose threshold
+    const area_mm2 = grownAreaPx*pxArea_mm2;
+    const diam_um = 2*Math.sqrt(grownAreaPx*pxArea_um2/Math.PI);
+    valid.push({...c, diam_um, area_mm2});
   }
 
   const binCounts = ISO_BINS.map(()=>0);
@@ -686,7 +851,10 @@ function runDetectionAndRender(mmPerPx, scaleInfo){
   reliabilityNote.innerHTML = `
     Resolusi efektif saat ini: 1px \u2248 ${umPerPx.toFixed(1)}\u00b5m &rarr; kelas ukuran di bawah
     \u2248${minReliableDiam.toFixed(0)}\u00b5m ditandai tidak reliable (bisa campur noise scan).<br><br>
-    Area selebar \u2248${((radiusPx+2)*mmPerPx).toFixed(2)}mm tepat di tepi tape tidak dihitung, untuk menghindari bayangan/gradasi tepi tape terbaca sebagai partikel palsu.<br><br>
+    ${isFallbackWholeFrame
+      ? 'Scan ini tidak punya batas kertas HVS yang kelihatan, jadi seluruh frame dianggap area tape (tidak ada tepi yang dikecualikan).'
+      : `Area selebar \u2248${((radiusPx+2)*mmPerPx).toFixed(2)}mm tepat di tepi tape tidak dihitung, untuk menghindari bayangan/gradasi tepi tape terbaca sebagai partikel palsu.`}<br><br>
+    Deteksi jumlah pakai ambang ketat (menghindari noise ikut kehitung), tapi ukuran/luas tiap partikel diukur pakai ambang lebih longgar (menangkap bagian pinggiran partikel yang pudar) &mdash; supaya Count akurat tanpa membuat Total Area &amp; Average Size jadi terlalu kecil.<br><br>
     ${excludedFold.length} objek dikecualikan dari hitungan karena bentuknya memanjang
     (kemungkinan lipatan/goresan tape, bukan partikel) &mdash; ditandai oranye putus-putus di overlay.<br><br>
     ${calib ? 'Kalibrasi noise scanner aktif dipakai sebagai batas bawah threshold.' : 'Belum ada kalibrasi blank scanner tersimpan &mdash; pertimbangkan upload scan blank di bagian 2 untuk akurasi lebih baik.'}
