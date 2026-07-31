@@ -294,7 +294,11 @@ async function renderRegion(source, targetLongSide, cropRect){
   const ry = cropRect ? cropRect.y : 0;
   const rw = cropRect ? cropRect.w : source.origW;
   const rh = cropRect ? cropRect.h : source.origH;
-  const scale = targetLongSide / Math.max(rw, rh);
+  // For raster images, scaling above 1:1 is interpolation (fake detail, distorts noise
+  // statistics) -- never upscale, only downscale for the performance budget. PDFs are vector
+  // content, so rendering at a higher scale is genuine resolution, not interpolation -- no cap.
+  const rawScale = targetLongSide / Math.max(rw, rh);
+  const scale = source.kind === 'image' ? Math.min(1, rawScale) : rawScale;
   const destW = Math.max(1, Math.round(rw*scale));
   const destH = Math.max(1, Math.round(rh*scale));
   const canvas = document.createElement('canvas');
