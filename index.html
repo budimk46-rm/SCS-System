@@ -572,7 +572,17 @@ fileInput.addEventListener('change', async (e)=>{
   const gray = toGray(imgData);
   const paperThresh = otsuThreshold(gray);
   const fgMask = segmentForeground(gray, w, h, paperThresh);
-  const found = largestForegroundComponent(fgMask, w, h);
+  let fgCount = 0; for(let i=0;i<fgMask.length;i++) fgCount += fgMask[i];
+
+  let found;
+  if(fgCount > w*h*0.90){
+    // No white HVS paper border visible in this image (already cropped tight to the tape) ->
+    // the corner-flood-fill approach has nothing to latch onto, so treat the whole frame as tape.
+    const wholeMask = new Uint8Array(w*h).fill(1);
+    found = { mask: wholeMask, comp: {count:w*h, minX:0, maxX:w-1, minY:0, maxY:h-1} };
+  } else {
+    found = largestForegroundComponent(fgMask, w, h);
+  }
   if(!found){
     clearStatus();
     alert('Area tape tidak terdeteksi. Pastikan tape terlihat kontras dengan kertas HVS di scan.');
@@ -613,8 +623,8 @@ function runDetectionAndRender(mmPerPx, scaleInfo){
   for(let i=0;i<diff.length;i++) diff[i] = mikaMask[i] ? Math.max(0, bg[i]-gray[i]) : 0;
   const stats = mean_std(diff, erodedMask);
   const calib = loadCalib();
-  let threshVal = stats.mean + 2.2*stats.std;
-  if(calib){ threshVal = Math.max(threshVal, calib.mean + 2.2*calib.std); }
+  let threshVal = stats.mean + 5*stats.std; // calibrated against real sample vs ImageJ reference count
+  if(calib){ threshVal = Math.max(threshVal, calib.mean + 5*calib.std); }
 
   const particleMask = new Uint8Array(w*h);
   for(let i=0;i<diff.length;i++) particleMask[i] = (erodedMask[i] && diff[i] > threshVal) ? 1 : 0;
@@ -625,7 +635,7 @@ function runDetectionAndRender(mmPerPx, scaleInfo){
   const valid = [];
   const excludedFold = [];
   for(const b of blobs){
-    if(b.count < 2) continue;
+    if(b.count < 4) continue;
     const bboxW = b.maxX-b.minX+1, bboxH = b.maxY-b.minY+1;
     const elong = Math.max(bboxW,bboxH)/Math.max(1,Math.min(bboxW,bboxH));
     const diam_um = 2*Math.sqrt(b.count*pxArea_um2/Math.PI);
