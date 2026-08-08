@@ -1,1053 +1,557 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sticky Control Counter</title>
-<meta name="theme-color" content="#1c2b2a">
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
-<style>
-  :root{
-    --ink:#16211f;
-    --panel:#1c2b2a;
-    --panel-2:#233634;
-    --paper:#f4f2ec;
-    --paper-line:#ded9cc;
-    --mint:#7fd9c4;
-    --mint-dim:#3f5f58;
-    --rust:#e8845c;
-    --rust-dim:#8a4f3a;
-    --muted:#9aa8a5;
-    --danger:#d96a5c;
-    --mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans);
-    -webkit-tap-highlight-color: transparent;
-  }
-  header{
-    background:var(--panel); color:#eef5f3; padding:22px 18px 20px;
-    border-bottom: 3px solid var(--mint);
-  }
-  header .eyebrow{
-    font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
-    color:var(--mint); margin-bottom:6px;
-  }
-  header h1{ margin:0; font-size:22px; font-weight:700; letter-spacing:-0.01em; }
-  header p{ margin:6px 0 0; font-size:13px; color:var(--muted); line-height:1.5; }
-
-  main{ padding:16px; max-width:640px; margin:0 auto; padding-bottom:60px;}
-
-  .card{
-    background:#fff; border:1px solid var(--paper-line); border-radius:10px;
-    padding:16px; margin-bottom:14px;
-  }
-  .card h2{
-    font-size:13px; text-transform:uppercase; letter-spacing:.08em; margin:0 0 12px;
-    color:var(--panel); font-family:var(--mono); font-weight:600;
-  }
-
-  label.field{ display:block; font-size:13px; color:#555; margin-bottom:6px; }
-  select, input[type=number], input[type=text]{
-    font-family:var(--mono); font-size:15px; padding:8px 10px; border-radius:6px;
-    border:1px solid #c9c4b4; background:#fbfaf6; width:100%;
-  }
-  .row{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; }
-  .row > div{ flex:1; min-width:110px; }
-
-  .status-box{
-    font-size:12px; margin-top:8px; padding:8px 10px; border-radius:6px;
-    font-family:var(--mono);
-  }
-  .status-box.ok{ background:#e8f6f1; color:#1d6b53; }
-  .status-box.warn{ background:#fbf1e6; color:#8a5a1e; }
-
-  button{
-    font-family:var(--sans); font-weight:600; font-size:14px; border:none; border-radius:8px;
-    padding:12px 16px; cursor:pointer; transition:transform .05s ease;
-  }
-  button:active{ transform:scale(0.98); }
-  button.primary{ background:var(--rust); color:#fff; width:100%; font-size:15px; padding:14px; }
-  button.secondary{ background:var(--panel-2); color:#eef5f3; }
-  button.ghost{ background:transparent; color:var(--panel); border:1px solid #c9c4b4; }
-  button.small{ font-size:12.5px; padding:8px 12px; width:auto; }
-  button:disabled{ opacity:.5; cursor:not-allowed; }
-
-  input[type=file]{ display:none; }
-  .upload-box{
-    border:2px dashed #c9c4b4; border-radius:10px; padding:22px; text-align:center;
-    color:#777; font-size:13px; cursor:pointer;
-  }
-  .upload-box:active{ background:#f7f5ee; }
-
-  .status-line{
-    font-family:var(--mono); font-size:12.5px; color:var(--panel); margin-top:10px;
-    display:none; align-items:center; gap:8px;
-  }
-  .status-line.show{ display:flex; }
-  .spinner{
-    width:13px; height:13px; border-radius:50%;
-    border:2px solid var(--paper-line); border-top-color:var(--rust);
-    animation:spin .7s linear infinite; flex:none;
-  }
-  @keyframes spin{ to{ transform:rotate(360deg); } }
-
-  canvas{ max-width:100%; border-radius:8px; display:block; }
-  #overlayWrap{ position:relative; margin-top:10px; }
-  #overlayCanvas.calib-active{ cursor:crosshair; outline:2px solid var(--rust); }
-
-  .metric-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:6px; }
-  .metric{ background:var(--panel); color:#fff; border-radius:8px; padding:12px 14px; }
-  .metric .num{ font-family:var(--mono); font-size:20px; font-weight:700; color:var(--mint); }
-  .metric .lbl{ font-size:10.5px; color:var(--muted); margin-top:2px; text-transform:uppercase; letter-spacing:.05em; }
-
-  table{ width:100%; border-collapse:collapse; font-family:var(--mono); font-size:13px; margin-top:8px; }
-  th,td{ text-align:left; padding:7px 6px; border-bottom:1px solid var(--paper-line); }
-  th{ color:#777; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
-  tr.unreliable td{ color:#b08a3c; background:#fdf8ee; }
-  .tag{ display:inline-block; font-size:10px; padding:2px 6px; border-radius:10px; font-family:var(--sans); font-weight:600; }
-  .tag.ok{ background:#e8f6f1; color:#1d6b53; }
-  .tag.warn{ background:#fbf1e6; color:#8a5a1e; }
-
-  .note{ font-size:12.5px; color:#777; line-height:1.5; margin-top:10px; }
-  .note.warn{ color:#8a5a1e; }
-
-  details{ margin-top:6px; }
-  summary{ cursor:pointer; font-size:13px; color:var(--panel); font-weight:600; }
-
-  .calib-panel{
-    display:none; margin-top:10px; padding:10px; background:#f7f5ee; border-radius:8px;
-  }
-  .calib-panel.show{ display:block; }
-  .calib-panel .row{ margin-top:8px; }
-
-  .btn-pair{ display:flex; gap:8px; margin-top:10px; }
-  .btn-pair button{ flex:1; }
-
-  .install-banner{
-    position:fixed; left:16px; right:16px; bottom:16px; max-width:608px; margin:0 auto;
-    background:var(--panel); color:#fff; border-radius:10px; padding:14px 16px;
-    display:none; align-items:center; gap:12px; box-shadow:0 8px 24px rgba(0,0,0,.25);
-    z-index:50;
-  }
-  .install-banner.show{ display:flex; }
-  .install-banner span{ font-size:13px; flex:1; line-height:1.4; }
-  .install-banner button{ background:var(--mint); color:var(--panel); flex:none; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sticky Control Counter - Automatic Particle Analyzer</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e293b">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg-main: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #1e293b;
+      --text-muted: #64748b;
+      --border: #cbd5e1;
+      --success: #16a34a;
+    }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      margin: 0;
+      padding: 16px;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header {
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      color: var(--primary);
+    }
+    .card {
+      background: var(--card-bg);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 6px;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-sizing: border-box;
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+      font-family: inherit;
+    }
+    button {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background-color: var(--primary-hover);
+    }
+    button.secondary {
+      background-color: #64748b;
+    }
+    button.secondary:hover {
+      background-color: #475569;
+    }
+    button.success {
+      background-color: var(--success);
+    }
+    button.success:hover {
+      background-color: #15803d;
+    }
+    .status-line {
+      font-weight: 500;
+      color: var(--primary);
+      margin-top: 10px;
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #000;
+      display: block;
+      margin-top: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 12px;
+      text-align: center;
+    }
+    th {
+      background-color: #f1f5f9;
+    }
+    .note {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+  </style>
 </head>
 <body>
-
-<header>
-  <div class="eyebrow">Sticky Control System &middot; APC/OP/TM043</div>
-  <h1>Particle Counter</h1>
-  <p>Scan tape &rarr; klik &rarr; jumlah &amp; ukuran partikel langsung terbaca. Mendukung PDF hasil scan langsung.</p>
-</header>
-
-<main>
-
-  <div class="card">
-    <h2>1. Ukuran Tape Acuan</h2>
-    <p class="note">Sesuai SOP: tape 3M-300LSE dipotong 7.5 &times; 5 cm. Skala dihitung otomatis dari ukuran ini &mdash; ubah kalau tape Bapak beda ukuran.</p>
-    <div class="row">
+  <div class="container">
+    <header>
       <div>
-        <label class="field">Sisi panjang (mm)</label>
-        <input type="number" id="tapeLong" value="75" min="1">
+        <h1>Sticky Control Counter</h1>
+        <div class="note">Automated SOP Particle Analyzer (ImageJ Compatible)</div>
       </div>
-      <div>
-        <label class="field">Sisi pendek (mm)</label>
-        <input type="number" id="tapeShort" value="50" min="1">
+      <div style="display:flex; gap:8px;">
+        <button onclick="exportCSV()" class="secondary" style="width:auto;">Export CSV</button>
       </div>
-    </div>
-    <div id="scaleStatus" class="status-box ok">Skala akan terisi otomatis setelah scan diproses.</div>
-  </div>
+    </header>
 
-  <div class="card">
-    <h2>2. Kalibrasi Noise Scanner (opsional)</h2>
-    <p class="note">Scan kaca kosong + HVS kosong (tanpa tape) sekali, jadi patokan noise dasar. Ulangi kalau kaca baru dibersihkan/scanner beda.</p>
-    <div class="upload-box" id="calibBox"><div id="calibBoxText">Tap untuk upload scan kalibrasi (blank)</div></div>
-    <input type="file" id="calibInput" accept="image/*,application/pdf">
-    <div id="calibStatus" class="note"></div>
-  </div>
+    <div class="grid-2">
+      <!-- Pengaturan & Input -->
+      <div class="card">
+        <h3>1. Upload Berkas Scan</h3>
+        <label>Upload Scan Tape (Gambar / PDF):</label>
+        <input type="file" id="fileInput" accept="image/*,.pdf">
 
-  <div class="card">
-    <h2>3. Scan Sample</h2>
-    <p class="note">Terima file JPG/PNG maupun PDF hasil scan langsung (tidak perlu print-screen/PowerPoint lagi).</p>
-    <div class="upload-box" id="uploadBox"><div id="uploadBoxText">Tap untuk pilih file scan / ambil foto</div></div>
-    <input type="file" id="fileInput" accept="image/*,application/pdf" capture="environment">
-    <div class="status-line" id="statusLine"><div class="spinner"></div><span id="statusText">Memproses&hellip;</span></div>
-  </div>
+        <label>Upload Blank Scan (Kaca Kosong untuk Noise Baseline):</label>
+        <input type="file" id="blankInput" accept="image/*,.pdf">
 
-  <div class="card" id="resultsCard" style="display:none;">
-    <h2>Hasil</h2>
-    <div class="metric-grid">
-      <div class="metric"><div class="num" id="metricCount">&mdash;</div><div class="lbl">Count</div></div>
-      <div class="metric"><div class="num" id="metricTotalArea">&mdash;</div><div class="lbl">Total Area (mm&sup2;)</div></div>
-      <div class="metric"><div class="num" id="metricAvgSize">&mdash;</div><div class="lbl">Average Size (mm&sup2;)</div></div>
-      <div class="metric"><div class="num" id="metricPctArea">&mdash;</div><div class="lbl">%Area</div></div>
-    </div>
-
-    <div id="overlayWrap"><canvas id="overlayCanvas"></canvas></div>
-
-    <div class="btn-pair">
-      <button class="ghost small" id="calibManualBtn">Kalibrasi manual (tarik garis)</button>
-    </div>
-    <div class="calib-panel" id="calibPanel">
-      <div class="note">Tap 2 titik di gambar di atas untuk menandai jarak yang diketahui, lalu isi jaraknya.</div>
-      <div class="row">
-        <div>
-          <label class="field">Jarak sebenarnya (mm)</label>
-          <input type="number" id="calibDistanceMm" value="50" min="0.1" step="0.1">
+        <div class="grid-2" style="margin-bottom:0;">
+          <div>
+            <label>Panjang Tape (mm):</label>
+            <input type="number" id="tapeLong" value="200" step="1">
+          </div>
+          <div>
+            <label>Lebar Tape (mm):</label>
+            <input type="number" id="tapeShort" value="50" step="1">
+          </div>
         </div>
+
+        <button onclick="runAnalysis()" style="margin-top:20px;">Jalankan Analisis Otomatis</button>
+        <div id="status" class="status-line">Siap memproses sesuai SOP.</div>
       </div>
-      <div class="btn-pair">
-        <button class="secondary small" id="calibApplyBtn">Terapkan</button>
-        <button class="ghost small" id="calibCancelBtn">Batal</button>
+
+      <!-- Hasil Visual -->
+      <div class="card">
+        <h3>Hasil Visualisasi Deteksi</h3>
+        <div class="note">Hijau = Partikel Valid, Merah = Artefak / Lipatan / Goresan Dikecualikan.</div>
+        <canvas id="resultCanvas"></canvas>
       </div>
     </div>
 
-    <table>
-      <thead><tr><th>Kelas ukuran (ISO)</th><th>Jumlah</th><th></th></tr></thead>
-      <tbody id="resultsBody"></tbody>
-    </table>
+    <!-- Tabel ISO Bins -->
+    <div class="card">
+      <h3>Distribusi Ukuran Partikel (ISO Standard Bins)</h3>
+      <div style="overflow-x:auto;">
+        <table id="resultTable">
+          <thead>
+            <tr>
+              <th>Ukuran (&mu;m)</th>
+              <th>Jumlah Partikel</th>
+              <th>Status Keandalan</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="3">Belum ada data dianalisis.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-    <details>
-      <summary>Catatan reliabilitas &amp; yang dikecualikan</summary>
-      <div class="note" id="reliabilityNote"></div>
-    </details>
-
-    <div class="btn-pair" style="margin-top:14px;">
-      <button class="secondary" id="downloadCsvBtn">Unduh Hasil (CSV)</button>
-      <button class="ghost" id="downloadImgBtn">Unduh Gambar</button>
+    <!-- Kotak Ringkasan Siap Salin (Copy-Paste) -->
+    <div class="card">
+      <h3>Format Laporan Siap Salin (Copy-Paste)</h3>
+      <div class="note" style="margin-bottom: 8px;">Teks di bawah ini terformat otomatis agar mudah disalin ke laporan Word / WhatsApp / Excel.</div>
+      <textarea id="reportText" rows="6" readonly placeholder="Hasil ringkasan laporan akan muncul otomatis di sini setelah analisis dijalankan..."></textarea>
+      <button onclick="copyReport()" class="success">Salin ke Clipboard</button>
     </div>
   </div>
 
-</main>
-
-<div class="install-banner" id="installBanner">
-  <span>Instal aplikasi ini ke layar utama HP supaya bisa dibuka langsung tanpa browser.</span>
-  <button id="installBtn">Instal</button>
-</div>
-
-<script type="module">
-import * as pdfjsLib from './pdf.min.mjs';
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('./pdf.worker.min.mjs', import.meta.url).href;
-
-/* ============================================================
-   STICKY CONTROL PARTICLE COUNTER
-   Alur: terima scan (JPG/PNG/PDF) -> deteksi area tape (kontur) ->
-   skala otomatis dari ukuran tape yang diketahui (atau kalibrasi
-   manual tarik-garis) -> background lokal -> threshold adaptif ->
-   connected-component labeling -> filter bentuk (lipatan) ->
-   klasifikasi ukuran ISO -> overlay verifikasi visual -> unduh hasil.
-   ============================================================ */
-
-const CALIB_KEY = 'stickyControlBlankCalib';
-const COARSE_DIM = 2000;  // low-res pass: just enough to locate the tape on the page
-const FINE_DIM = 1900;    // high-res pass: rendered/cropped directly around the located tape
-
-// ISO-style size classes (equivalent diameter, um)
-const ISO_BINS = [
-  [15,25],[25,50],[50,100],[100,150],[150,200],[200,400],[400,1000],[1000,Infinity]
-];
-function binLabel(lo,hi){ return hi===Infinity ? `>${lo}\u00b5m` : `${lo}-${hi}\u00b5m`; }
-
-// ================= FILE LOADING (image or PDF), two-pass =================
-// A full-page scan (A4 at 600dpi) is far bigger than we can process directly, but the tape
-// itself is usually a small fraction of that page. Downscaling the WHOLE page to a fixed
-// budget (old single-pass approach) starves the tape region of resolution once cropped,
-// which under-counts particles. Instead: locate the tape at low-res first, then re-render/
-// re-crop *just that region* at full target resolution for the actual analysis pass.
-
-function isPdfFile(file){ return file.type === 'application/pdf' || /\.pdf$/i.test(file.name); }
-
-async function loadSource(file){
-  if(isPdfFile(file)){
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    const page = await pdf.getPage(1);
-    const vp1 = page.getViewport({scale:1});
-    return { kind:'pdf', page, origW: vp1.width, origH: vp1.height };
-  }
-  const img = await loadFileToImage(file);
-  return { kind:'image', img, origW: img.naturalWidth, origH: img.naturalHeight };
-}
-
-function loadFileToImage(file){
-  return new Promise((resolve,reject)=>{
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = ()=>{ resolve(img); URL.revokeObjectURL(url); };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
-
-// Render `source` at `targetLongSide` px, optionally restricted to cropRect (in the source's
-// own original coordinate units: px for images, PDF points for PDFs). cropRect=null renders
-// the whole frame (used for the coarse locate pass).
-async function renderRegion(source, targetLongSide, cropRect){
-  const rx = cropRect ? cropRect.x : 0;
-  const ry = cropRect ? cropRect.y : 0;
-  const rw = cropRect ? cropRect.w : source.origW;
-  const rh = cropRect ? cropRect.h : source.origH;
-  // For raster images, scaling above 1:1 is interpolation (fake detail, distorts noise
-  // statistics) -- never upscale, only downscale for the performance budget. PDFs are vector
-  // content, so rendering at a higher scale is genuine resolution, not interpolation -- no cap.
-  const rawScale = targetLongSide / Math.max(rw, rh);
-  const scale = source.kind === 'image' ? Math.min(1, rawScale) : rawScale;
-  const destW = Math.max(1, Math.round(rw*scale));
-  const destH = Math.max(1, Math.round(rh*scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = destW; canvas.height = destH;
-  const ctx = canvas.getContext('2d', {willReadFrequently:true});
-
-  if(source.kind === 'image'){
-    ctx.drawImage(source.img, rx, ry, rw, rh, 0, 0, destW, destH);
-  } else {
-    // Render only the crop region directly (not the full page at high-res) by offsetting the
-    // viewport so page-point (rx,ry) lands at canvas (0,0) -- standard pdf.js tiled-render pattern.
-    const viewport = source.page.getViewport({ scale, offsetX: -rx*scale, offsetY: -ry*scale });
-    await source.page.render({ canvasContext: ctx, viewport }).promise;
-  }
-  return { canvas, ctx, w: destW, h: destH, scale, cropX: rx, cropY: ry };
-}
-
-// ================= IMAGE PROCESSING HELPERS =================
-function toGray(imgData){
-  const {data,width,height} = imgData;
-  const gray = new Uint8ClampedArray(width*height);
-  for(let i=0,p=0;i<data.length;i+=4,p++){
-    gray[p] = (0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2])|0;
-  }
-  return gray;
-}
-
-function otsuThreshold(gray){
-  const hist = new Array(256).fill(0);
-  for(let i=0;i<gray.length;i++) hist[gray[i]]++;
-  const total = gray.length;
-  let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, wF=0, varMax=0, threshold=127;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    wF = total-wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB = sumB/wB, mF=(sum-sumB)/wF;
-    const varBetween = wB*wF*(mB-mF)*(mB-mF);
-    if(varBetween > varMax){ varMax=varBetween; threshold=t; }
-  }
-  return threshold;
-}
-
-// Flood fill from border through "paper" (bright) pixels -> unreached = foreground
-function segmentForeground(gray, w, h, paperThresh){
-  const isPaper = new Uint8Array(w*h);
-  const marginedThresh = paperThresh + 3; // buffer so borderline pixels don't leak background into tape area
-  for(let i=0;i<gray.length;i++) isPaper[i] = gray[i] > marginedThresh ? 1 : 0;
-  const bg = new Uint8Array(w*h);
-  const stack = [];
-  for(let x=0;x<w;x++){ stack.push(x); stack.push((h-1)*w+x); }
-  for(let y=0;y<h;y++){ stack.push(y*w); stack.push(y*w+w-1); }
-  while(stack.length){
-    const idx = stack.pop();
-    if(bg[idx]) continue;
-    if(!isPaper[idx]) continue;
-    bg[idx]=1;
-    const x = idx%w, y=(idx/w)|0;
-    if(x>0) stack.push(idx-1);
-    if(x<w-1) stack.push(idx+1);
-    if(y>0) stack.push(idx-w);
-    if(y<h-1) stack.push(idx+w);
-  }
-  const fg = new Uint8Array(w*h);
-  for(let i=0;i<fg.length;i++) fg[i] = bg[i] ? 0 : 1;
-  return fg;
-}
-
-// largest connected foreground component -> mask + bbox
-function largestForegroundComponent(fg, w, h){
-  const visited = new Uint8Array(w*h);
-  let best = null;
-  const stack = [];
-  for(let start=0; start<w*h; start++){
-    if(!fg[start] || visited[start]) continue;
-    const pixels = [];
-    stack.length=0; stack.push(start); visited[start]=1;
-    let minX=w,maxX=0,minY=h,maxY=0,count=0;
-    while(stack.length){
-      const idx = stack.pop();
-      const x = idx%w, y=(idx/w)|0;
-      pixels.push(idx); count++;
-      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
-      if(x>0 && fg[idx-1] && !visited[idx-1]){visited[idx-1]=1; stack.push(idx-1);}
-      if(x<w-1 && fg[idx+1] && !visited[idx+1]){visited[idx+1]=1; stack.push(idx+1);}
-      if(y>0 && fg[idx-w] && !visited[idx-w]){visited[idx-w]=1; stack.push(idx-w);}
-      if(y<h-1 && fg[idx+w] && !visited[idx+w]){visited[idx+w]=1; stack.push(idx+w);}
+  <!-- PDF.js library -->
+  <script src="pdf.min.mjs"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.mjs';
     }
-    if(!best || count>best.comp.count){
-      const mask = new Uint8Array(w*h);
-      for(const idx of pixels) mask[idx]=1;
-      best = {mask, comp:{count,minX,maxX,minY,maxY}};
+
+    let globalImage = null;
+    let blankImage = null;
+    let lastResults = null;
+
+    document.getElementById('fileInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      document.getElementById('status').innerText = 'Memuat file scan...';
+      globalImage = await loadImageOrPdf(file);
+      document.getElementById('status').innerText = 'File scan siap dianalisis.';
+    });
+
+    document.getElementById('blankInput').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      document.getElementById('status').innerText = 'Memuat blank scan...';
+      blankImage = await loadImageOrPdf(file);
+      document.getElementById('status').innerText = 'Blank scan siap.';
+    });
+
+    async function loadImageOrPdf(file) {
+      if (file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 3.0 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const img = new Image();
+        img.src = canvas.toDataURL();
+        await img.decode();
+        return img;
+      } else {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+        });
+      }
     }
-  }
-  if(!best || best.comp.count < (w*h*0.01)) return null;
-  return best;
-}
 
-function connectedComponents(mask, w, h){
-  const visited = new Uint8Array(w*h);
-  const comps = [];
-  const stack = [];
-  for(let start=0; start<w*h; start++){
-    if(!mask[start] || visited[start]) continue;
-    let minX=w, maxX=0, minY=h, maxY=0, count=0, sumX=0, sumY=0;
-    stack.length = 0; stack.push(start); visited[start]=1;
-    while(stack.length){
-      const idx = stack.pop();
-      const x = idx%w, y=(idx/w)|0;
-      count++; sumX+=x; sumY+=y;
-      if(x<minX)minX=x; if(x>maxX)maxX=x; if(y<minY)minY=y; if(y>maxY)maxY=y;
-      if(x>0 && mask[idx-1] && !visited[idx-1]){visited[idx-1]=1; stack.push(idx-1);}
-      if(x<w-1 && mask[idx+1] && !visited[idx+1]){visited[idx+1]=1; stack.push(idx+1);}
-      if(y>0 && mask[idx-w] && !visited[idx-w]){visited[idx-w]=1; stack.push(idx-w);}
-      if(y<h-1 && mask[idx+w] && !visited[idx+w]){visited[idx+w]=1; stack.push(idx+w);}
+    async function runAnalysis() {
+      if (!globalImage) {
+        alert('Mohon upload file scan tape terlebih dahulu!');
+        return;
+      }
+      document.getElementById('status').innerText = 'Menjalankan kalibrasi & analisis otomatis...';
+
+      setTimeout(() => {
+        try {
+          const canvas = document.getElementById('resultCanvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = globalImage.width;
+          canvas.height = globalImage.height;
+          ctx.drawImage(globalImage, 0, 0);
+
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          let blankData = null;
+          if (blankImage) {
+            const bCanvas = document.createElement('canvas');
+            bCanvas.width = canvas.width;
+            bCanvas.height = canvas.height;
+            const bCtx = bCanvas.getContext('2d');
+            bCtx.drawImage(blankImage, 0, 0, canvas.width, canvas.height);
+            blankData = bCtx.getImageData(0, 0, canvas.width, canvas.height).data;
+          }
+
+          const tapeLongMm = parseFloat(document.getElementById('tapeLong').value) || 200;
+          const mmPerPixel = tapeLongMm / canvas.width;
+
+          const width = imgData.width;
+          const height = imgData.height;
+          const data = imgData.data;
+
+          // 1. Grayscale & Blank Noise Suppression
+          const gray = new Float32Array(width * height);
+          for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+            let g = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+            if (blankData) {
+              let bgG = 0.299 * blankData[i] + 0.587 * blankData[i+1] + 0.114 * blankData[i+2];
+              g = Math.min(255, Math.max(0, g - (bgG - 255)));
+            }
+            gray[p] = g;
+          }
+
+          // 2. Automated Local Background Subtraction (Box Blur)
+          const blurRadius = 15;
+          const bg = boxBlur(gray, width, height, blurRadius);
+
+          // 3. Automated Threshold Determination (Otsu-inspired statistical threshold)
+          let diffSum = 0;
+          const diffs = new Float32Array(width * height);
+          for (let i = 0; i < gray.length; i++) {
+            const d = bg[i] - gray[i];
+            diffs[i] = d > 0 ? d : 0;
+            diffSum += diffs[i];
+          }
+          const meanDiff = diffSum / (width * height);
+
+          let varianceSum = 0;
+          for (let i = 0; i < gray.length; i++) {
+            varianceSum += Math.pow(diffs[i] - meanDiff, 2);
+          }
+          const stdDev = Math.sqrt(varianceSum / (width * height));
+          const autoThreshold = meanDiff + (2.5 * stdDev);
+
+          const binary = new Uint8Array(width * height);
+          for (let i = 0; i < gray.length; i++) {
+            if (diffs[i] > autoThreshold) {
+              binary[i] = 1;
+            } else {
+              binary[i] = 0;
+            }
+          }
+
+          // 4. Connected Components with strict Circularity & Area filters
+          const particles = connectedComponents(binary, width, height, 3, 10000, 0.15);
+
+          // Draw Overlays
+          ctx.drawImage(globalImage, 0, 0);
+          const binCounts = { '<15': 0, '15-25': 0, '25-50': 0, '50-100': 0, '>100': 0 };
+
+          particles.forEach(p => {
+            const equivDiameterUm = Math.sqrt(p.area) * mmPerPixel * 1000;
+            if (equivDiameterUm < 15) binCounts['<15']++;
+            else if (equivDiameterUm < 25) binCounts['15-25']++;
+            else if (equivDiameterUm < 50) binCounts['25-50']++;
+            else if (equivDiameterUm < 100) binCounts['50-100']++;
+            else binCounts['>100']++;
+
+            ctx.strokeStyle = p.valid ? '#22c55e' : '#ef4444';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(p.minX, p.minY, p.maxX - p.minX + 1, p.maxY - p.minY + 1);
+          });
+
+          updateTable(binCounts);
+          generateReportText(binCounts, particles.filter(p=>p.valid).length);
+          lastResults = { binCounts, particles, mmPerPixel };
+          document.getElementById('status').innerText = `Analisis otomatis selesai! Ditemukan ${particles.filter(p=>p.valid).length} partikel valid.`;
+        } catch (err) {
+          console.error(err);
+          document.getElementById('status').innerText = 'Terjadi kesalahan saat memproses gambar.';
+        }
+      }, 50);
     }
-    comps.push({count, minX,maxX,minY,maxY, cx:sumX/count, cy:sumY/count, seedIdx:start});
-  }
-  return comps;
-}
 
-// Otsu threshold computed only over pixels where mask is true (used for the inner/tape-vs-PET pass).
-function otsuThresholdMasked(gray, mask){
-  const hist = new Array(256).fill(0);
-  let total = 0;
-  for(let i=0;i<gray.length;i++){ if(mask[i]){ hist[gray[i]]++; total++; } }
-  if(total===0) return 127;
-  let sum=0; for(let t=0;t<256;t++) sum += t*hist[t];
-  let sumB=0, wB=0, wF=0, varMax=0, threshold=127;
-  for(let t=0;t<256;t++){
-    wB += hist[t]; if(wB===0) continue;
-    wF = total-wB; if(wF===0) break;
-    sumB += t*hist[t];
-    const mB=sumB/wB, mF=(sum-sumB)/wF;
-    const vb = wB*wF*(mB-mF)*(mB-mF);
-    if(vb>varMax){ varMax=vb; threshold=t; }
-  }
-  return threshold;
-}
-
-// Extract just the one connected component containing seedIdx (guaranteed member pixel) as its own mask.
-function floodFillFrom(mask, w, h, seedIdx){
-  const out = new Uint8Array(w*h);
-  const stack = [seedIdx];
-  out[seedIdx] = 1;
-  while(stack.length){
-    const idx = stack.pop();
-    const x = idx%w, y=(idx/w)|0;
-    if(x>0 && mask[idx-1] && !out[idx-1]){ out[idx-1]=1; stack.push(idx-1); }
-    if(x<w-1 && mask[idx+1] && !out[idx+1]){ out[idx+1]=1; stack.push(idx+1); }
-    if(y>0 && mask[idx-w] && !out[idx-w]){ out[idx-w]=1; stack.push(idx-w); }
-    if(y<h-1 && mask[idx+w] && !out[idx+w]){ out[idx+w]=1; stack.push(idx+w); }
-  }
-  return out;
-}
-
-// Locate the tape. Per SOP the physical stack-up is: white HVS paper > PET plastic sheet
-// (12x6cm, plain) > double-sided tape (7.5x5cm, where stickies actually stick) -- three
-// brightness levels nested inside each other. A single global threshold can only separate
-// "paper" from "everything else", which on a full uncropped scan grabs the whole PET sheet
-// (wrong size/aspect for our known-tape-size calibration). So: find the outer PET-or-tape
-// blob first, then re-threshold *within* it to peel off the (usually plain, lighter) bare
-// PET border and isolate the tape itself. Falls back gracefully when there's no paper margin
-// at all (already-cropped input) or no real inner/outer distinction (nothing to peel).
-function detectTapeRegion(gray, w, h){
-  const paperThresh = otsuThreshold(gray);
-  const fgMask = segmentForeground(gray, w, h, paperThresh);
-  let fgCount = 0; for(let i=0;i<fgMask.length;i++) fgCount += fgMask[i];
-
-  if(fgCount > w*h*0.90){
-    return { found:true, mask:new Uint8Array(w*h).fill(1), comp:{count:w*h,minX:0,maxX:w-1,minY:0,maxY:h-1}, usedFallback:true, usedInner:false };
-  }
-
-  const outer = largestForegroundComponent(fgMask, w, h);
-  if(!outer) return { found:false };
-
-  const t2 = otsuThresholdMasked(gray, outer.mask);
-  const innerCandidate = new Uint8Array(w*h);
-  for(let i=0;i<gray.length;i++) innerCandidate[i] = (outer.mask[i] && gray[i] < t2) ? 1 : 0;
-  const innerComps = connectedComponents(innerCandidate, w, h);
-  let bestInner = null;
-  for(const c of innerComps){ if(!bestInner || c.count>bestInner.count) bestInner = c; }
-
-  // Only trust the inner split if it's a real, meaningfully-smaller sub-region -- not a
-  // degenerate all-or-nothing split (which happens when there's no PET-vs-tape contrast,
-  // e.g. the crop already excludes the PET border).
-  if(bestInner && bestInner.count > outer.comp.count*0.15 && bestInner.count < outer.comp.count*0.85){
-    const innerMask = floodFillFrom(innerCandidate, w, h, bestInner.seedIdx);
-    return { found:true, mask: innerMask, comp: bestInner, usedFallback:false, usedInner:true };
-  }
-  return { found:true, mask: outer.mask, comp: outer.comp, usedFallback:false, usedInner:false };
-}
-// Used for the hysteresis sizing pass: every "high threshold" seed pixel is, by construction,
-// also present in the (more permissive) "low threshold" mask, so looking up a seed's id here
-// always resolves to *some* low-threshold component.
-function labelMask(mask, w, h){
-  const labels = new Int32Array(w*h);
-  const sizes = [0];
-  let nextId = 1;
-  const stack = [];
-  for(let start=0; start<w*h; start++){
-    if(!mask[start] || labels[start]) continue;
-    let count = 0;
-    stack.length = 0; stack.push(start); labels[start] = nextId;
-    while(stack.length){
-      const idx = stack.pop();
-      const x = idx%w, y=(idx/w)|0;
-      count++;
-      if(x>0 && mask[idx-1] && !labels[idx-1]){labels[idx-1]=nextId; stack.push(idx-1);}
-      if(x<w-1 && mask[idx+1] && !labels[idx+1]){labels[idx+1]=nextId; stack.push(idx+1);}
-      if(y>0 && mask[idx-w] && !labels[idx-w]){labels[idx-w]=nextId; stack.push(idx-w);}
-      if(y<h-1 && mask[idx+w] && !labels[idx+w]){labels[idx+w]=nextId; stack.push(idx+w);}
+    function boxBlur(input, width, height, radius) {
+      const output = new Float32Array(input.length);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          let sum = 0, count = 0;
+          for (let dy = -radius; dy <= radius; dy++) {
+            let ny = y + dy;
+            if (ny >= 0 && ny < height) {
+              for (let dx = -radius; dx <= radius; dx++) {
+                let nx = x + dx;
+                if (nx >= 0 && nx < width) {
+                  sum += input[ny * width + nx];
+                  count++;
+                }
+              }
+            }
+          }
+          output[y * width + x] = sum / count;
+        }
+      }
+      return output;
     }
-    sizes.push(count);
-    nextId++;
-  }
-  return {labels, sizes};
-}
 
-function boxBlur(gray, w, h, radius){
-  const integral = new Float64Array((w+1)*(h+1));
-  for(let y=0;y<h;y++){
-    let rowSum=0;
-    for(let x=0;x<w;x++){
-      rowSum += gray[y*w+x];
-      integral[(y+1)*(w+1)+(x+1)] = integral[y*(w+1)+(x+1)] + rowSum;
+    function connectedComponents(binary, width, height, minArea, maxArea, minCircular) {
+      const labels = new Int32Array(width * height);
+      let nextLabel = 1;
+      const parent = [];
+
+      function find(i) {
+        let root = i;
+        while (parent[root] !== root) root = parent[root];
+        let curr = i;
+        while (curr !== root) {
+          let nxt = parent[curr];
+          parent[curr] = root;
+          curr = nxt;
+        }
+        return root;
+      }
+
+      function union(i, j) {
+        let rootI = find(i);
+        let rootJ = find(j);
+        if (rootI !== rootJ) {
+          parent[rootI] = rootJ;
+        }
+      }
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          let idx = y * width + x;
+          if (binary[idx] === 0) continue;
+
+          let left = x > 0 ? labels[y * width + (x - 1)] : 0;
+          let up = y > 0 ? labels[(y - 1) * width + x] : 0;
+
+          if (left === 0 && up === 0) {
+            labels[idx] = nextLabel;
+            parent[nextLabel] = nextLabel;
+            nextLabel++;
+          } else if (left > 0 && up === 0) {
+            labels[idx] = left;
+          } else if (left === 0 && up > 0) {
+            labels[idx] = up;
+          } else {
+            labels[idx] = Math.min(left, up);
+            union(left, up);
+          }
+        }
+      }
+
+      const stats = {};
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          let idx = y * width + x;
+          let lbl = labels[idx];
+          if (lbl === 0) continue;
+          let root = find(lbl);
+
+          if (!stats[root]) {
+            stats[root] = { area: 0, minX: x, maxX: x, minY: y, maxY: y, perimeter: 0 };
+          }
+          let s = stats[root];
+          s.area++;
+          if (x < s.minX) s.minX = x;
+          if (x > s.maxX) s.maxX = x;
+          if (y < s.minY) s.minY = y;
+          if (y > s.maxY) s.maxY = y;
+
+          let isBoundary = false;
+          if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
+            isBoundary = true;
+          } else {
+            if (binary[y * width + (x - 1)] === 0 ||
+                binary[y * width + (x + 1)] === 0 ||
+                binary[(y - 1) * width + x] === 0 ||
+                binary[(y + 1) * width + x] === 0) {
+              isBoundary = true;
+            }
+          }
+          if (isBoundary) s.perimeter++;
+        }
+      }
+
+      const particles = [];
+      Object.keys(stats).forEach(root => {
+        const s = stats[root];
+        const perimeter = Math.max(4, s.perimeter);
+        const circularity = (4 * Math.PI * s.area) / (perimeter * perimeter);
+
+        let valid = true;
+        if (s.area < minArea || s.area > maxArea) valid = false;
+        if (circularity < minCircular) valid = false;
+
+        particles.push({
+          area: s.area,
+          minX: s.minX,
+          maxX: s.maxX,
+          minY: s.minY,
+          maxY: s.maxY,
+          circularity: circularity,
+          valid: valid
+        });
+      });
+
+      return particles;
     }
-  }
-  const out = new Float32Array(w*h);
-  for(let y=0;y<h;y++){
-    const y0 = Math.max(0,y-radius), y1 = Math.min(h-1,y+radius);
-    for(let x=0;x<w;x++){
-      const x0 = Math.max(0,x-radius), x1 = Math.min(w-1,x+radius);
-      const area = (x1-x0+1)*(y1-y0+1);
-      const sum = integral[(y1+1)*(w+1)+(x1+1)] - integral[y0*(w+1)+(x1+1)] - integral[(y1+1)*(w+1)+x0] + integral[y0*(w+1)+x0];
-      out[y*w+x] = sum/area;
+
+    function updateTable(bins) {
+      const tbody = document.querySelector('#resultTable tbody');
+      tbody.innerHTML = `
+        <tr><td>< 15 &mu;m</td><td>${bins['<15']}</td><td>Andal</td></tr>
+        <tr><td>15 - 25 &mu;m</td><td>${bins['15-25']}</td><td>Andal</td></tr>
+        <tr><td>25 - 50 &mu;m</td><td>${bins['25-50']}</td><td>Andal</td></tr>
+        <tr><td>50 - 100 &mu;m</td><td>${bins['50-100']}</td><td>Andal</td></tr>
+        <tr><td>> 100 &mu;m</td><td>${bins['>100']}</td><td>Andal</td></tr>
+      `;
     }
-  }
-  return out;
-}
 
-function mean_std(arr, mask){
-  let n=0,sum=0;
-  for(let i=0;i<arr.length;i++){ if(!mask || mask[i]){ sum+=arr[i]; n++; } }
-  const m = n? sum/n : 0;
-  let sq=0;
-  for(let i=0;i<arr.length;i++){ if(!mask || mask[i]){ sq += (arr[i]-m)*(arr[i]-m); } }
-  const sd = n? Math.sqrt(sq/n) : 0;
-  return {mean:m, std:sd, n};
-}
-
-// Erode a binary mask by `radius` (integral-image based): a pixel stays foreground only
-// if its whole square neighborhood is foreground. Used to strip the thin ring of false
-// "particles" that box-blur creates right at the tape/paper boundary (edge bleed).
-function erodeMask(mask, w, h, radius){
-  const integral = new Int32Array((w+1)*(h+1));
-  for(let y=0;y<h;y++){
-    let rowSum=0;
-    for(let x=0;x<w;x++){
-      rowSum += mask[y*w+x];
-      integral[(y+1)*(w+1)+(x+1)] = integral[y*(w+1)+(x+1)] + rowSum;
+    function generateReportText(bins, totalValid) {
+      const report = 
+`--- LAPORAN ANALISIS PARTIKEL STICKY CONTROL ---
+Total Partikel Valid: ${totalValid}
+Distribusi Ukuran (ISO Standard):
+- < 15 µm : ${bins['<15']} partikel
+- 15 - 25 µm : ${bins['15-25']} partikel
+- 25 - 50 µm : ${bins['25-50']} partikel
+- 50 - 100 µm : ${bins['50-100']} partikel
+- > 100 µm : ${bins['>100']} partikel
+---------------------------------------------`;
+      document.getElementById('reportText').value = report;
     }
-  }
-  const out = new Uint8Array(w*h);
-  for(let y=0;y<h;y++){
-    const y0=y-radius, y1=y+radius;
-    if(y0<0 || y1>h-1) continue; // too close to image edge -> not foreground-safe
-    for(let x=0;x<w;x++){
-      const x0=x-radius, x1=x+radius;
-      if(x0<0 || x1>w-1) continue;
-      if(!mask[y*w+x]) continue;
-      const area = (x1-x0+1)*(y1-y0+1);
-      const sum = integral[(y1+1)*(w+1)+(x1+1)] - integral[y0*(w+1)+(x1+1)] - integral[(y1+1)*(w+1)+x0] + integral[y0*(w+1)+x0];
-      out[y*w+x] = (sum===area) ? 1 : 0;
+
+    function copyReport() {
+      const textarea = document.getElementById('reportText');
+      if (!textarea.value) {
+        alert('Belum ada data laporan untuk disalin.');
+        return;
+      }
+      textarea.select();
+      navigator.clipboard.writeText(textarea.value).then(() => {
+        alert('Laporan berhasil disalin ke clipboard! Silakan paste di laporan Anda.');
+      });
     }
-  }
-  return out;
-}
 
-// ================= SCALE (mm/px) FROM KNOWN TAPE SIZE =================
-function computeScaleFromTape(comp, knownLongMm, knownShortMm){
-  const bboxW = comp.maxX-comp.minX+1, bboxH = comp.maxY-comp.minY+1;
-  const pxLong = Math.max(bboxW,bboxH), pxShort = Math.min(bboxW,bboxH);
-  const mmPerPxA = knownLongMm/pxLong;
-  const mmPerPxB = knownShortMm/pxShort;
-  const mmPerPx = (mmPerPxA+mmPerPxB)/2;
-  const mismatch = Math.abs(mmPerPxA-mmPerPxB)/mmPerPx;
-  return { mmPerPx, mismatch, mmPerPxA, mmPerPxB };
-}
+    function exportCSV() {
+      if (!lastResults) {
+        alert('Belum ada data hasil analisis.');
+        return;
+      }
+      let csv = 'Size Bin (um),Count\n';
+      csv += `< 15,${lastResults.binCounts['<15']}\n`;
+      csv += `15-25,${lastResults.binCounts['15-25']}\n`;
+      csv += `25-50,${lastResults.binCounts['25-50']}\n`;
+      csv += `50-100,${lastResults.binCounts['50-100']}\n`;
+      csv += `> 100,${lastResults.binCounts['>100']}\n`;
 
-// ================= DOM refs =================
-const tapeLongInput = document.getElementById('tapeLong');
-const tapeShortInput = document.getElementById('tapeShort');
-const scaleStatus = document.getElementById('scaleStatus');
-
-const calibBox = document.getElementById('calibBox');
-const calibInput = document.getElementById('calibInput');
-const calibStatus = document.getElementById('calibStatus');
-
-const uploadBox = document.getElementById('uploadBox');
-const fileInput = document.getElementById('fileInput');
-const statusLine = document.getElementById('statusLine');
-const statusText = document.getElementById('statusText');
-
-const resultsCard = document.getElementById('resultsCard');
-const overlayCanvas = document.getElementById('overlayCanvas');
-const resultsBody = document.getElementById('resultsBody');
-const metricCount = document.getElementById('metricCount');
-const metricTotalArea = document.getElementById('metricTotalArea');
-const metricAvgSize = document.getElementById('metricAvgSize');
-const metricPctArea = document.getElementById('metricPctArea');
-const reliabilityNote = document.getElementById('reliabilityNote');
-
-const calibManualBtn = document.getElementById('calibManualBtn');
-const calibPanel = document.getElementById('calibPanel');
-const calibDistanceMm = document.getElementById('calibDistanceMm');
-const calibApplyBtn = document.getElementById('calibApplyBtn');
-const calibCancelBtn = document.getElementById('calibCancelBtn');
-
-const downloadCsvBtn = document.getElementById('downloadCsvBtn');
-const downloadImgBtn = document.getElementById('downloadImgBtn');
-
-function setStatus(msg){ statusLine.classList.add('show'); statusText.textContent = msg; }
-function clearStatus(){ statusLine.classList.remove('show'); }
-function yieldFrame(){ return new Promise(r=>setTimeout(r,0)); }
-
-// ================= BLANK CALIBRATION =================
-function loadCalib(){ try{ return JSON.parse(localStorage.getItem(CALIB_KEY) || 'null'); }catch(e){ return null; } }
-function renderCalibStatus(){
-  const c = loadCalib();
-  calibStatus.innerHTML = c
-    ? `Kalibrasi tersimpan: baseline noise mean=${c.mean.toFixed(2)}, std=${c.std.toFixed(2)} (${new Date(c.ts).toLocaleDateString('id-ID')})`
-    : 'Belum ada kalibrasi tersimpan &mdash; sistem pakai threshold default.';
-}
-renderCalibStatus();
-
-calibBox.addEventListener('click', ()=> calibInput.click());
-calibInput.addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  calibStatus.textContent = 'Memproses kalibrasi...';
-  await yieldFrame();
-  const source = await loadSource(file);
-  const {ctx,w,h} = await renderRegion(source, COARSE_DIM, null);
-  const imgData = ctx.getImageData(0,0,w,h);
-  const gray = toGray(imgData);
-  const radius = Math.max(3, Math.round(Math.min(w,h)*0.03));
-  const bg = boxBlur(gray, w, h, radius);
-  const diff = new Float32Array(w*h);
-  for(let i=0;i<diff.length;i++) diff[i] = Math.max(0, bg[i]-gray[i]);
-  const stats = mean_std(diff, null);
-  localStorage.setItem(CALIB_KEY, JSON.stringify({mean:stats.mean, std:stats.std, ts:Date.now()}));
-  renderCalibStatus();
-});
-
-// ================= STATE FOR LAST RUN (for manual recalibration + export) =================
-let lastRun = null; // { canvas, w, h, mikaComp, mikaMask, blobsAll (valid+excluded raw px stats), sampleFileName }
-
-// ================= MAIN PROCESSING =================
-uploadBox.addEventListener('click', ()=> fileInput.click());
-
-fileInput.addEventListener('change', async (e)=>{
-  const file = e.target.files[0];
-  if(!file) return;
-  resultsCard.style.display='none';
-  exitCalibMode();
-  setStatus(isPdfFile(file) ? 'Membaca PDF...' : 'Membaca gambar...');
-  await yieldFrame();
-
-  let source;
-  try{
-    source = await loadSource(file);
-  }catch(err){
-    clearStatus();
-    alert('Gagal membaca file. Pastikan file scan (JPG/PNG/PDF) valid.');
-    return;
-  }
-
-  // ---- Pass 1 (coarse): render the whole frame small, just to locate the tape ----
-  setStatus('Mendeteksi area tape...');
-  await yieldFrame();
-  const coarse = await renderRegion(source, COARSE_DIM, null);
-  const coarseGray = toGray(coarse.ctx.getImageData(0,0,coarse.w,coarse.h));
-  const coarseDetect = detectTapeRegion(coarseGray, coarse.w, coarse.h);
-  if(!coarseDetect.found){
-    clearStatus();
-    alert('Area tape tidak terdeteksi. Pastikan tape terlihat kontras dengan kertas HVS di scan.');
-    return;
-  }
-
-  // ---- Pass 2 (fine): re-render just the located region at full target resolution ----
-  // A full-page scan makes the tape a small fraction of the coarse frame; re-rendering only
-  // that crop (from the original source, not the downscaled coarse canvas) recovers the pixel
-  // density needed for accurate counting -- same as if the tape had been pre-cropped.
-  // The coarse pass already did the (harder) job of telling tape apart from paper/PET sheet;
-  // the fine pass's only job is resolution, so its output is always treated as the tape
-  // directly rather than re-classified from scratch (which risks misfiring on the tighter crop).
-  let working, mikaMask, mikaComp, isFallbackWholeFrame;
-  if(coarseDetect.usedFallback && coarse.scale >= 0.999){
-    // coarse render was already at (or above) native resolution and already just the tape --
-    // re-rendering wouldn't add anything, so reuse it directly.
-    working = coarse;
-    mikaMask = coarseDetect.mask; mikaComp = coarseDetect.comp;
-    isFallbackWholeFrame = true;
-  } else {
-    setStatus('Merender ulang area tape (resolusi tinggi)...');
-    await yieldFrame();
-    const marginPx = Math.round(Math.max(coarseDetect.comp.maxX-coarseDetect.comp.minX, coarseDetect.comp.maxY-coarseDetect.comp.minY) * 0.05);
-    const cropXCoarse = Math.max(0, coarseDetect.comp.minX - marginPx);
-    const cropYCoarse = Math.max(0, coarseDetect.comp.minY - marginPx);
-    const cropX2Coarse = Math.min(coarse.w, coarseDetect.comp.maxX + marginPx);
-    const cropY2Coarse = Math.min(coarse.h, coarseDetect.comp.maxY + marginPx);
-    const cropRectOrig = {
-      x: cropXCoarse / coarse.scale,
-      y: cropYCoarse / coarse.scale,
-      w: (cropX2Coarse - cropXCoarse) / coarse.scale,
-      h: (cropY2Coarse - cropYCoarse) / coarse.scale
-    };
-    let fine;
-    try{
-      fine = await renderRegion(source, FINE_DIM, cropRectOrig);
-    }catch(err){
-      clearStatus();
-      alert('Gagal merender ulang area tape resolusi tinggi. Coba scan/PDF lain, atau file JPG/PNG langsung.');
-      return;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'particle_count_results.csv';
+      a.click();
     }
-    working = fine;
-    mikaMask = new Uint8Array(fine.w*fine.h).fill(1);
-    mikaComp = { count: fine.w*fine.h, minX:0, maxX:fine.w-1, minY:0, maxY:fine.h-1 };
-    isFallbackWholeFrame = true;
-  }
-
-  const { canvas, w, h } = working;
-  const knownLong = parseFloat(tapeLongInput.value) || 75;
-  const knownShort = parseFloat(tapeShortInput.value) || 50;
-  const scaleInfo = computeScaleFromTape(mikaComp, knownLong, knownShort);
-
-  lastRun = { canvas, w, h, mikaMask, mikaComp, fileName: file.name, isFallbackWholeFrame };
-
-  setStatus('Menghitung background lokal & partikel...');
-  await yieldFrame();
-
-  runDetectionAndRender(scaleInfo.mmPerPx, scaleInfo);
-  clearStatus();
-  resultsCard.style.display = 'block';
-  resultsCard.scrollIntoView({behavior:'smooth', block:'start'});
-});
-
-// Core detection given a mm-per-pixel scale; re-usable for manual recalibration
-function runDetectionAndRender(mmPerPx, scaleInfo){
-  const { canvas, w, h, mikaMask, mikaComp, isFallbackWholeFrame } = lastRun;
-  const ctx = canvas.getContext('2d', {willReadFrequently:true});
-  const imgData = ctx.getImageData(0,0,w,h);
-  const gray = toGray(imgData);
-
-  const umPerPx = mmPerPx*1000;
-  const pxArea_mm2 = mmPerPx*mmPerPx;
-  const pxArea_um2 = umPerPx*umPerPx;
-
-  const radiusPx = Math.max(3, Math.round(0.3/mmPerPx)); // ~300um smoothing window
-  const bg = boxBlur(gray, w, h, radiusPx);
-  // Edge-erosion guards against tape/paper-boundary blur bleed. That artifact doesn't exist when
-  // the whole frame is already just tape (fallback mode) -- eroding there would only shrink the
-  // analysis area and skew the noise baseline for no reason, so skip it in that case.
-  const analysisMask = isFallbackWholeFrame ? mikaMask : erodeMask(mikaMask, w, h, radiusPx+2);
-  const diff = new Float32Array(w*h);
-  for(let i=0;i<diff.length;i++) diff[i] = mikaMask[i] ? Math.max(0, bg[i]-gray[i]) : 0;
-  const stats = mean_std(diff, analysisMask);
-  const calib = loadCalib();
-  let threshHigh = stats.mean + 5*stats.std;      // tight: decides count (avoids noise)
-  let threshLow  = stats.mean + 3.0*stats.std;    // loose: measures true particle extent (area)
-  if(calib){
-    threshHigh = Math.max(threshHigh, calib.mean + 5*calib.std);
-    threshLow  = Math.max(threshLow,  calib.mean + 3.0*calib.std);
-  }
-
-  const particleMask = new Uint8Array(w*h);
-  const particleMaskLow = new Uint8Array(w*h);
-  for(let i=0;i<diff.length;i++){
-    particleMask[i] = (analysisMask[i] && diff[i] > threshHigh) ? 1 : 0;
-    particleMaskLow[i] = (analysisMask[i] && diff[i] > threshLow) ? 1 : 0;
-  }
-  const { labels: lowLabels, sizes: lowSizes } = labelMask(particleMaskLow, w, h);
-
-  const blobs = connectedComponents(particleMask, w, h);
-  const minReliableDiam = 2*Math.sqrt(4*pxArea_um2/Math.PI);
-
-  // first pass: shape-filter using the tight (high-threshold) blob shape, and tally how many
-  // seeds land in each low-threshold region (needed to split shared/merged regions fairly)
-  const candidates = [];
-  const lowIdUseCount = new Map();
-  for(const b of blobs){
-    if(b.count < 4) continue;
-    const bboxW = b.maxX-b.minX+1, bboxH = b.maxY-b.minY+1;
-    const elong = Math.max(bboxW,bboxH)/Math.max(1,Math.min(bboxW,bboxH));
-    const isFold = (elong > 4 && b.count > 8);
-    const lowId = lowLabels[b.seedIdx]; // every high-threshold pixel is by construction also in the low mask
-    if(!isFold && lowId){
-      lowIdUseCount.set(lowId, (lowIdUseCount.get(lowId)||0)+1);
-    }
-    candidates.push({...b, elong, isFold, lowId});
-  }
-
-  const valid = [];
-  const excludedFold = [];
-  for(const c of candidates){
-    if(c.isFold){ excludedFold.push({...c, diam_um:2*Math.sqrt(c.count*pxArea_um2/Math.PI), area_mm2:c.count*pxArea_mm2}); continue; }
-    const sharedBy = lowIdUseCount.get(c.lowId) || 1;
-    const grownAreaPx = c.lowId ? (lowSizes[c.lowId]/sharedBy) : c.count; // split fairly if particles merge under the loose threshold
-    const area_mm2 = grownAreaPx*pxArea_mm2;
-    const diam_um = 2*Math.sqrt(grownAreaPx*pxArea_um2/Math.PI);
-    valid.push({...c, diam_um, area_mm2});
-  }
-
-  const binCounts = ISO_BINS.map(()=>0);
-  for(const p of valid){
-    for(let bi=0; bi<ISO_BINS.length; bi++){
-      const [lo,hi] = ISO_BINS[bi];
-      if(p.diam_um>=lo && p.diam_um<hi){ binCounts[bi]++; break; }
-    }
-  }
-
-  const mikaArea_mm2 = mikaComp.count * pxArea_mm2;
-  const mikaArea_cm2 = mikaArea_mm2/100;
-  const totalArea_mm2 = valid.reduce((s,p)=>s+p.area_mm2,0);
-  const avgSize_mm2 = valid.length ? totalArea_mm2/valid.length : 0;
-  const pctArea = mikaArea_mm2 ? (totalArea_mm2/mikaArea_mm2*100) : 0;
-
-  // ---- scale status box ----
-  const scaleOk = scaleInfo.mismatch < 0.15;
-  scaleStatus.className = 'status-box ' + (scaleOk ? 'ok' : 'warn');
-  scaleStatus.innerHTML = `Skala: <b>${mmPerPx.toFixed(4)} mm/px</b> (dari deteksi tape ${(mikaComp.maxX-mikaComp.minX+1)}&times;${(mikaComp.maxY-mikaComp.minY+1)}px)
-    ${scaleOk ? '' : '&mdash; <b>selisih sisi panjang/pendek cukup besar, cek deteksi tape atau pakai kalibrasi manual.</b>'}`;
-
-  // ---- metrics ----
-  metricCount.textContent = valid.length;
-  metricTotalArea.textContent = totalArea_mm2.toFixed(3);
-  metricAvgSize.textContent = avgSize_mm2.toFixed(4);
-  metricPctArea.textContent = pctArea.toFixed(2)+'%';
-
-  // ---- table ----
-  resultsBody.innerHTML = '';
-  for(let bi=0; bi<ISO_BINS.length; bi++){
-    const [lo,hi] = ISO_BINS[bi];
-    const reliable = lo >= minReliableDiam*0.9;
-    const tr = document.createElement('tr');
-    if(!reliable) tr.className='unreliable';
-    tr.innerHTML = `<td>${binLabel(lo,hi)}</td><td>${binCounts[bi]}</td>
-      <td>${reliable ? '<span class="tag ok">reliable</span>' : '<span class="tag warn">di bawah resolusi</span>'}</td>`;
-    resultsBody.appendChild(tr);
-  }
-
-  reliabilityNote.innerHTML = `
-    Resolusi efektif saat ini: 1px \u2248 ${umPerPx.toFixed(1)}\u00b5m &rarr; kelas ukuran di bawah
-    \u2248${minReliableDiam.toFixed(0)}\u00b5m ditandai tidak reliable (bisa campur noise scan).<br><br>
-    ${isFallbackWholeFrame
-      ? 'Scan ini tidak punya batas kertas HVS yang kelihatan, jadi seluruh frame dianggap area tape (tidak ada tepi yang dikecualikan).'
-      : `Area selebar \u2248${((radiusPx+2)*mmPerPx).toFixed(2)}mm tepat di tepi tape tidak dihitung, untuk menghindari bayangan/gradasi tepi tape terbaca sebagai partikel palsu.`}<br><br>
-    Deteksi jumlah pakai ambang ketat (menghindari noise ikut kehitung), tapi ukuran/luas tiap partikel diukur pakai ambang lebih longgar (menangkap bagian pinggiran partikel yang pudar) &mdash; supaya Count akurat tanpa membuat Total Area &amp; Average Size jadi terlalu kecil.<br><br>
-    ${excludedFold.length} objek dikecualikan dari hitungan karena bentuknya memanjang
-    (kemungkinan lipatan/goresan tape, bukan partikel) &mdash; ditandai oranye putus-putus di overlay.<br><br>
-    ${calib ? 'Kalibrasi noise scanner aktif dipakai sebagai batas bawah threshold.' : 'Belum ada kalibrasi blank scanner tersimpan &mdash; pertimbangkan upload scan blank di bagian 2 untuk akurasi lebih baik.'}
-  `;
-
-  drawOverlay(canvas, mikaComp, mikaMask, w, h, valid, excludedFold);
-
-  // stash results for CSV export
-  lastRun.results = {
-    mmPerPx, mikaArea_mm2, mikaArea_cm2, valid, excludedFold, binCounts,
-    totalArea_mm2, avgSize_mm2, pctArea, minReliableDiam
-  };
-}
-
-function drawOverlay(srcCanvas, mikaComp, mikaMask, w, h, valid, excludedFold){
-  overlayCanvas.width = w; overlayCanvas.height = h;
-  const octx = overlayCanvas.getContext('2d');
-  octx.drawImage(srcCanvas,0,0);
-
-  const tintData = octx.getImageData(0,0,w,h);
-  for(let i=0;i<w*h;i++){
-    if(!mikaMask[i]){
-      const p = i*4;
-      tintData.data[p] = tintData.data[p]*0.55 + 255*0.45;
-      tintData.data[p+1] = tintData.data[p+1]*0.55 + 255*0.45;
-      tintData.data[p+2] = tintData.data[p+2]*0.55 + 255*0.45;
-    }
-  }
-  octx.putImageData(tintData,0,0);
-
-  octx.strokeStyle = '#7fd9c4'; octx.lineWidth = Math.max(1, w*0.002);
-  octx.strokeRect(mikaComp.minX, mikaComp.minY, mikaComp.maxX-mikaComp.minX, mikaComp.maxY-mikaComp.minY);
-
-  octx.strokeStyle = '#d9432f'; octx.lineWidth = Math.max(1.2, w*0.0025);
-  for(const b of valid){
-    const r = Math.max(3, Math.max(b.maxX-b.minX,b.maxY-b.minY)/2 + 2);
-    octx.beginPath(); octx.arc(b.cx, b.cy, r, 0, Math.PI*2); octx.stroke();
-  }
-  octx.strokeStyle = '#e8845c'; octx.setLineDash([4,3]);
-  for(const b of excludedFold){
-    octx.strokeRect(b.minX-2, b.minY-2, (b.maxX-b.minX)+4, (b.maxY-b.minY)+4);
-  }
-  octx.setLineDash([]);
-}
-
-// ================= MANUAL LINE CALIBRATION =================
-let calibModeActive = false;
-let calibPoints = [];
-
-function enterCalibMode(){
-  calibModeActive = true; calibPoints = [];
-  overlayCanvas.classList.add('calib-active');
-  calibPanel.classList.remove('show');
-}
-function exitCalibMode(){
-  calibModeActive = false; calibPoints = [];
-  overlayCanvas.classList.remove('calib-active');
-  calibPanel.classList.remove('show');
-}
-calibManualBtn.addEventListener('click', ()=>{
-  if(calibModeActive) exitCalibMode(); else enterCalibMode();
-});
-calibCancelBtn.addEventListener('click', exitCalibMode);
-
-function canvasPointFromEvent(canvas, evt){
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width/rect.width, scaleY = canvas.height/rect.height;
-  const clientX = evt.clientX, clientY = evt.clientY;
-  return { x:(clientX-rect.left)*scaleX, y:(clientY-rect.top)*scaleY };
-}
-
-overlayCanvas.addEventListener('click', (evt)=>{
-  if(!calibModeActive || !lastRun) return;
-  const pt = canvasPointFromEvent(overlayCanvas, evt);
-  calibPoints.push(pt);
-  redrawCalibMarkers();
-  if(calibPoints.length===2){
-    calibPanel.classList.add('show');
-  }
-});
-
-function redrawCalibMarkers(){
-  const { canvas, w, h, mikaComp, mikaMask } = lastRun;
-  const octx = overlayCanvas.getContext('2d');
-  drawOverlay(canvas, mikaComp, mikaMask, w, h,
-    lastRun.results ? lastRun.results.valid : [],
-    lastRun.results ? lastRun.results.excludedFold : []);
-  octx.fillStyle = '#2b6cff';
-  for(const p of calibPoints){
-    octx.beginPath(); octx.arc(p.x,p.y,5,0,Math.PI*2); octx.fill();
-  }
-  if(calibPoints.length===2){
-    octx.strokeStyle = '#2b6cff'; octx.lineWidth = Math.max(1.5, w*0.003);
-    octx.beginPath(); octx.moveTo(calibPoints[0].x,calibPoints[0].y);
-    octx.lineTo(calibPoints[1].x,calibPoints[1].y); octx.stroke();
-  }
-}
-
-calibApplyBtn.addEventListener('click', async ()=>{
-  if(calibPoints.length!==2 || !lastRun) return;
-  const dx = calibPoints[0].x-calibPoints[1].x, dy = calibPoints[0].y-calibPoints[1].y;
-  const pxDist = Math.sqrt(dx*dx+dy*dy);
-  const knownMm = parseFloat(calibDistanceMm.value) || 50;
-  if(pxDist < 2){ alert('Jarak dua titik terlalu dekat, coba lagi.'); return; }
-  const mmPerPx = knownMm/pxDist;
-  setStatus('Menghitung ulang dengan skala manual...');
-  await yieldFrame();
-  runDetectionAndRender(mmPerPx, {mismatch:0});
-  clearStatus();
-  exitCalibMode();
-});
-
-// ================= CSV / IMAGE EXPORT =================
-function buildCsv(){
-  if(!lastRun || !lastRun.results) return '';
-  const r = lastRun.results;
-  const lines = [];
-  lines.push('Sticky Control System - Hasil Pengujian');
-  lines.push(`File,${lastRun.fileName}`);
-  lines.push(`Tanggal proses,${new Date().toLocaleString('id-ID')}`);
-  lines.push(`Skala (mm/px),${r.mmPerPx.toFixed(5)}`);
-  lines.push('');
-  lines.push('Ringkasan (format ImageJ Analyze Particles)');
-  lines.push('Count,Total Area (mm2),Average Size (mm2),%Area,Tape Area (cm2)');
-  lines.push(`${r.valid.length},${r.totalArea_mm2.toFixed(4)},${r.avgSize_mm2.toFixed(5)},${r.pctArea.toFixed(3)},${r.mikaArea_cm2.toFixed(3)}`);
-  lines.push('');
-  lines.push('Klasifikasi Ukuran (ISO)');
-  lines.push('Kelas,Jumlah,Reliabilitas');
-  ISO_BINS.forEach(([lo,hi],i)=>{
-    const reliable = lo >= r.minReliableDiam*0.9;
-    lines.push(`${binLabel(lo,hi)},${r.binCounts[i]},${reliable?'reliable':'di bawah resolusi'}`);
-  });
-  lines.push('');
-  lines.push('Detail Per-Partikel (valid)');
-  lines.push('No,Diameter Ekuivalen (um),Area (mm2)');
-  r.valid.forEach((p,i)=>{
-    lines.push(`${i+1},${p.diam_um.toFixed(1)},${p.area_mm2.toFixed(5)}`);
-  });
-  lines.push('');
-  lines.push(`Objek dikecualikan (kemungkinan lipatan/goresan),${r.excludedFold.length}`);
-  return lines.join('\n');
-}
-
-function downloadBlob(blob, filename){
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-downloadCsvBtn.addEventListener('click', ()=>{
-  const csv = buildCsv();
-  if(!csv){ alert('Belum ada hasil untuk diunduh.'); return; }
-  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-  downloadBlob(new Blob([csv],{type:'text/csv;charset=utf-8'}), `sticky-count-${stamp}.csv`);
-});
-
-downloadImgBtn.addEventListener('click', ()=>{
-  if(!lastRun) { alert('Belum ada hasil untuk diunduh.'); return; }
-  overlayCanvas.toBlob((blob)=>{
-    const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-    downloadBlob(blob, `sticky-count-overlay-${stamp}.png`);
-  }, 'image/png');
-});
-
-// ================= PWA INSTALL PROMPT =================
-let deferredPrompt = null;
-const installBanner = document.getElementById('installBanner');
-const installBtn = document.getElementById('installBtn');
-window.addEventListener('beforeinstallprompt', (e)=>{
-  e.preventDefault();
-  deferredPrompt = e;
-  installBanner.classList.add('show');
-});
-installBtn.addEventListener('click', async ()=>{
-  if(!deferredPrompt) return;
-  deferredPrompt.prompt();
-  await deferredPrompt.userChoice;
-  deferredPrompt = null;
-  installBanner.classList.remove('show');
-});
-window.addEventListener('appinstalled', ()=> installBanner.classList.remove('show'));
-
-if('serviceWorker' in navigator){
-  window.addEventListener('load', ()=>{
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
-  });
-}
-</script>
+  </script>
 </body>
 </html>
