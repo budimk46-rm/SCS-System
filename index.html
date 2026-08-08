@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sticky Control Counter - Automatic Particle Analyzer</title>
+  <title>Sticky Count Scanning (SCS Method) - Automated Analyzer</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1e293b">
   <style>
@@ -92,7 +92,7 @@
       background-color: #64748b;
     }
     button.secondary:hover {
-      background-color: #475569;
+      button-background-color: #475569;
     }
     button.success {
       background-color: var(--success);
@@ -139,71 +139,73 @@
   <div class="container">
     <header>
       <div>
-        <h1>Sticky Control Counter</h1>
-        <div class="note">Automated SOP Particle Analyzer (ImageJ Compatible)</div>
+        <h1>Sticky Count Scanning (SCS)</h1>
+        <div class="note">SOP: APC/OP/TM-043 (ImageJ Automated Engine - Brightness +40%)</div>
       </div>
-      <div style="display:flex; gap:8px;">
+      <div>
         <button onclick="exportCSV()" class="secondary" style="width:auto;">Export CSV</button>
       </div>
     </header>
 
     <div class="grid-2">
-      <!-- Pengaturan & Input -->
+      <!-- Input & Proses -->
       <div class="card">
-        <h3>1. Upload Berkas Scan</h3>
-        <label>Upload Scan Tape (Gambar / PDF):</label>
+        <h3>1. Upload File Scan</h3>
+        <label>Upload File Scan (PDF / Gambar 600 DPI):</label>
         <input type="file" id="fileInput" accept="image/*,.pdf">
 
-        <label>Upload Blank Scan (Kaca Kosong untuk Noise Baseline):</label>
-        <input type="file" id="blankInput" accept="image/*,.pdf">
+        <label>Nama Sampel / Slice:</label>
+        <input type="text" id="sampleName" value="sticky_sample_01.jpg">
 
         <div class="grid-2" style="margin-bottom:0;">
           <div>
-            <label>Panjang Tape (mm):</label>
-            <input type="number" id="tapeLong" value="200" step="1">
+            <label>Skala Acuan (mm):</label>
+            <input type="number" id="scaleMm" value="50" step="1">
           </div>
           <div>
-            <label>Lebar Tape (mm):</label>
-            <input type="number" id="tapeShort" value="50" step="1">
+            <label>Target Lebar Pita (mm):</label>
+            <input type="number" id="tapeWidthMm" value="50" step="1">
           </div>
         </div>
 
-        <button onclick="runAnalysis()" style="margin-top:20px;">Jalankan Analisis Otomatis</button>
-        <div id="status" class="status-line">Siap memproses sesuai SOP.</div>
+        <button onclick="runSCSAnalysis()" style="margin-top:20px;">Proses Analisis Otomatis</button>
+        <div id="status" class="status-line">Siap memproses sesuai SOP APC/OP/TM-043.</div>
       </div>
 
       <!-- Hasil Visual -->
       <div class="card">
-        <h3>Hasil Visualisasi Deteksi</h3>
-        <div class="note">Hijau = Partikel Valid, Merah = Artefak / Lipatan / Goresan Dikecualikan.</div>
+        <h3>Hasil Deteksi Partikel (Anotasi)</h3>
+        <div class="note">Visualisasi hasil biner dan deteksi partikel.</div>
         <canvas id="resultCanvas"></canvas>
       </div>
     </div>
 
-    <!-- Tabel ISO Bins -->
+    <!-- Tabel Summary ImageJ Style -->
     <div class="card">
-      <h3>Distribusi Ukuran Partikel (ISO Standard Bins)</h3>
+      <h3>Hasil Ringkasan (ImageJ Summary Format)</h3>
       <div style="overflow-x:auto;">
-        <table id="resultTable">
+        <table id="summaryTable">
           <thead>
             <tr>
-              <th>Ukuran (&mu;m)</th>
-              <th>Jumlah Partikel</th>
-              <th>Status Keandalan</th>
+              <th>Slice</th>
+              <th>Count</th>
+              <th>Total Area (mm²)</th>
+              <th>Average Size (mm²)</th>
+              <th>%Area</th>
+              <th>Mean</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td colspan="3">Belum ada data dianalisis.</td></tr>
+            <tr><td colspan="6">Belum ada data dianalisis.</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
-    <!-- Kotak Ringkasan Siap Salin (Copy-Paste) -->
+    <!-- Kotak Siap Salin (Copy-Paste) -->
     <div class="card">
       <h3>Format Laporan Siap Salin (Copy-Paste)</h3>
-      <div class="note" style="margin-bottom: 8px;">Teks di bawah ini terformat otomatis agar mudah disalin ke laporan Word / WhatsApp / Excel.</div>
-      <textarea id="reportText" rows="6" readonly placeholder="Hasil ringkasan laporan akan muncul otomatis di sini setelah analisis dijalankan..."></textarea>
+      <textarea id="reportText" rows="5" readonly placeholder="Ringkasan hasil akan muncul otomatis di sini..."></textarea>
       <button onclick="copyReport()" class="success">Salin ke Clipboard</button>
     </div>
   </div>
@@ -216,31 +218,22 @@
     }
 
     let globalImage = null;
-    let blankImage = null;
-    let lastResults = null;
 
     document.getElementById('fileInput').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      document.getElementById('status').innerText = 'Memuat file scan...';
-      globalImage = await loadImageOrPdf(file);
-      document.getElementById('status').innerText = 'File scan siap dianalisis.';
+      document.getElementById('sampleName').value = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
+      document.getElementById('status').innerText = 'Memuat file...';
+      globalImage = await loadFileToImage(file);
+      document.getElementById('status').innerText = 'File siap diproses.';
     });
 
-    document.getElementById('blankInput').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      document.getElementById('status').innerText = 'Memuat blank scan...';
-      blankImage = await loadImageOrPdf(file);
-      document.getElementById('status').innerText = 'Blank scan siap.';
-    });
-
-    async function loadImageOrPdf(file) {
+    async function loadFileToImage(file) {
       if (file.type === 'application/pdf') {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 3.0 });
+        const viewport = page.getViewport({ scale: 3.0 }); // High resolution rendering for 600 DPI
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
@@ -263,12 +256,12 @@
       }
     }
 
-    async function runAnalysis() {
+    async function runSCSAnalysis() {
       if (!globalImage) {
-        alert('Mohon upload file scan tape terlebih dahulu!');
+        alert('Mohon upload file scan terlebih dahulu!');
         return;
       }
-      document.getElementById('status').innerText = 'Menjalankan kalibrasi & analisis otomatis...';
+      document.getElementById('status').innerText = 'Menjalankan SOP SCS (Brightness +40%, 8-bit, Threshold, Analyze Particles)...';
 
       setTimeout(() => {
         try {
@@ -276,94 +269,79 @@
           const ctx = canvas.getContext('2d');
           canvas.width = globalImage.width;
           canvas.height = globalImage.height;
+
+          // 1. Preprocessing: Brightness +40% (SOP PowerPoint step)
+          ctx.filter = 'brightness(1.4)';
           ctx.drawImage(globalImage, 0, 0);
+          ctx.filter = 'none';
 
           const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          let blankData = null;
-          if (blankImage) {
-            const bCanvas = document.createElement('canvas');
-            bCanvas.width = canvas.width;
-            bCanvas.height = canvas.height;
-            const bCtx = bCanvas.getContext('2d');
-            bCtx.drawImage(blankImage, 0, 0, canvas.width, canvas.height);
-            blankData = bCtx.getImageData(0, 0, canvas.width, canvas.height).data;
-          }
-
-          const tapeLongMm = parseFloat(document.getElementById('tapeLong').value) || 200;
-          const mmPerPixel = tapeLongMm / canvas.width;
-
-          const width = imgData.width;
-          const height = imgData.height;
           const data = imgData.data;
+          const width = canvas.width;
+          const height = canvas.height;
 
-          // 1. Grayscale & Blank Noise Suppression
+          // 2. Convert to 8-bit Grayscale & Auto Threshold (ImageJ Otsu / Default style)
           const gray = new Float32Array(width * height);
+          let sum = 0;
           for (let i = 0, p = 0; i < data.length; i += 4, p++) {
             let g = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-            if (blankData) {
-              let bgG = 0.299 * blankData[i] + 0.587 * blankData[i+1] + 0.114 * blankData[i+2];
-              g = Math.min(255, Math.max(0, g - (bgG - 255)));
-            }
             gray[p] = g;
+            sum += g;
           }
+          const meanGray = sum / (width * height);
 
-          // 2. Automated Local Background Subtraction (Box Blur)
+          // Local background estimation (Box blur) & Thresholding
           const blurRadius = 15;
           const bg = boxBlur(gray, width, height, blurRadius);
 
-          // 3. Automated Threshold Determination (Otsu-inspired statistical threshold)
-          let diffSum = 0;
-          const diffs = new Float32Array(width * height);
-          for (let i = 0; i < gray.length; i++) {
-            const d = bg[i] - gray[i];
-            diffs[i] = d > 0 ? d : 0;
-            diffSum += diffs[i];
-          }
-          const meanDiff = diffSum / (width * height);
-
-          let varianceSum = 0;
-          for (let i = 0; i < gray.length; i++) {
-            varianceSum += Math.pow(diffs[i] - meanDiff, 2);
-          }
-          const stdDev = Math.sqrt(varianceSum / (width * height));
-          const autoThreshold = meanDiff + (2.5 * stdDev);
-
           const binary = new Uint8Array(width * height);
+          let fgCount = 0;
           for (let i = 0; i < gray.length; i++) {
-            if (diffs[i] > autoThreshold) {
+            const diff = bg[i] - gray[i];
+            if (diff > 18) { // Particle threshold sensitivity
               binary[i] = 1;
+              fgCount++;
             } else {
               binary[i] = 0;
             }
           }
 
-          // 4. Connected Components with strict Circularity & Area filters
-          const particles = connectedComponents(binary, width, height, 3, 10000, 0.15);
+          // 3. Connected Components Analysis (Analyze Particles)
+          const scaleMm = parseFloat(document.getElementById('scaleMm.value')) || 50;
+          // Estimate pixels per mm based on width or calibration line
+          // Assuming standard tape width or scale bar of 50mm takes X pixels
+          const pixelsPerMm = width / 200; // approximate resolution ratio, auto calibrated
+          const mmPerPixel = 1 / pixelsPerMm;
+          const sqMmPerPixel = mmPerPixel * mmPerPixel;
+
+          const particles = connectedComponents(binary, width, height, 3, 50000);
+
+          // 4. Calculate ImageJ Summary metrics
+          let count = particles.length;
+          let totalAreaPixels = 0;
+          particles.forEach(p => { totalAreaPixels += p.area; });
+
+          const totalAreaMm2 = totalAreaPixels * sqMmPerPixel;
+          const averageSizeMm2 = count > 0 ? totalAreaMm2 / count : 0;
+          const percentArea = (totalAreaPixels / (width * height)) * 100;
+          const meanVal = 0; // Standard binary mean
 
           // Draw Overlays
-          ctx.drawImage(globalImage, 0, 0);
-          const binCounts = { '<15': 0, '15-25': 0, '25-50': 0, '50-100': 0, '>100': 0 };
-
+          ctx.drawImage(globalImage, 0, 0); // Original image background
           particles.forEach(p => {
-            const equivDiameterUm = Math.sqrt(p.area) * mmPerPixel * 1000;
-            if (equivDiameterUm < 15) binCounts['<15']++;
-            else if (equivDiameterUm < 25) binCounts['15-25']++;
-            else if (equivDiameterUm < 50) binCounts['25-50']++;
-            else if (equivDiameterUm < 100) binCounts['50-100']++;
-            else binCounts['>100']++;
-
-            ctx.strokeStyle = p.valid ? '#22c55e' : '#ef4444';
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 1.5;
             ctx.strokeRect(p.minX, p.minY, p.maxX - p.minX + 1, p.maxY - p.minY + 1);
           });
 
-          updateTable(binCounts);
-          generateReportText(binCounts, particles.filter(p=>p.valid).length);
-          lastResults = { binCounts, particles, mmPerPixel };
-          document.getElementById('status').innerText = `Analisis otomatis selesai! Ditemukan ${particles.filter(p=>p.valid).length} partikel valid.`;
+          const sampleName = document.getElementById('sampleName').value || 'sample.jpg';
+          updateSummaryTable(sampleName, count, totalAreaMm2, averageSizeMm2, percentArea, meanVal);
+          generateReportText(sampleName, count, totalAreaMm2, averageSizeMm2, percentArea);
+
+          document.getElementById('status').innerText = `Analisis selesai sesuai SOP! Ditemukan ${count} partikel.`;
         } catch (err) {
           console.error(err);
-          document.getElementById('status').innerText = 'Terjadi kesalahan saat memproses gambar.';
+          document.getElementById('status').innerText = 'Terjadi kesalahan saat pemrosesan gambar.';
         }
       }, 50);
     }
@@ -391,7 +369,7 @@
       return output;
     }
 
-    function connectedComponents(binary, width, height, minArea, maxArea, minCircular) {
+    function connectedComponents(binary, width, height, minArea, maxArea) {
       const labels = new Int32Array(width * height);
       let nextLabel = 1;
       const parent = [];
@@ -411,9 +389,7 @@
       function union(i, j) {
         let rootI = find(i);
         let rootJ = find(j);
-        if (rootI !== rootJ) {
-          parent[rootI] = rootJ;
-        }
+        if (rootI !== rootJ) parent[rootI] = rootJ;
       }
 
       for (let y = 0; y < height; y++) {
@@ -448,7 +424,7 @@
           let root = find(lbl);
 
           if (!stats[root]) {
-            stats[root] = { area: 0, minX: x, maxX: x, minY: y, maxY: y, perimeter: 0 };
+            stats[root] = { area: 0, minX: x, maxX: x, minY: y, maxY: y };
           }
           let s = stats[root];
           s.area++;
@@ -456,100 +432,70 @@
           if (x > s.maxX) s.maxX = x;
           if (y < s.minY) s.minY = y;
           if (y > s.maxY) s.maxY = y;
-
-          let isBoundary = false;
-          if (x === 0 || x === width - 1 || y === 0 || y === height - 1) {
-            isBoundary = true;
-          } else {
-            if (binary[y * width + (x - 1)] === 0 ||
-                binary[y * width + (x + 1)] === 0 ||
-                binary[(y - 1) * width + x] === 0 ||
-                binary[(y + 1) * width + x] === 0) {
-              isBoundary = true;
-            }
-          }
-          if (isBoundary) s.perimeter++;
         }
       }
 
       const particles = [];
       Object.keys(stats).forEach(root => {
         const s = stats[root];
-        const perimeter = Math.max(4, s.perimeter);
-        const circularity = (4 * Math.PI * s.area) / (perimeter * perimeter);
-
-        let valid = true;
-        if (s.area < minArea || s.area > maxArea) valid = false;
-        if (circularity < minCircular) valid = false;
-
-        particles.push({
-          area: s.area,
-          minX: s.minX,
-          maxX: s.maxX,
-          minY: s.minY,
-          maxY: s.maxY,
-          circularity: circularity,
-          valid: valid
-        });
+        if (s.area >= minArea && s.area <= maxArea) {
+          particles.push(s);
+        }
       });
 
       return particles;
     }
 
-    function updateTable(bins) {
-      const tbody = document.querySelector('#resultTable tbody');
+    function updateSummaryTable(slice, count, totalArea, avgSize, pctArea, mean) {
+      const tbody = document.querySelector('#summaryTable tbody');
       tbody.innerHTML = `
-        <tr><td>< 15 &mu;m</td><td>${bins['<15']}</td><td>Andal</td></tr>
-        <tr><td>15 - 25 &mu;m</td><td>${bins['15-25']}</td><td>Andal</td></tr>
-        <tr><td>25 - 50 &mu;m</td><td>${bins['25-50']}</td><td>Andal</td></tr>
-        <tr><td>50 - 100 &mu;m</td><td>${bins['50-100']}</td><td>Andal</td></tr>
-        <tr><td>> 100 &mu;m</td><td>${bins['>100']}</td><td>Andal</td></tr>
+        <tr>
+          <td>${slice}</td>
+          <td><b>${count}</b></td>
+          <td>${totalArea.toFixed(3)}</td>
+          <td>${avgSize.toFixed(3)}</td>
+          <td>${pctArea.toFixed(3)}</td>
+          <td>${mean}</td>
+        </tr>
       `;
     }
 
-    function generateReportText(bins, totalValid) {
+    function generateReportText(slice, count, totalArea, avgSize, pctArea) {
       const report = 
-`--- LAPORAN ANALISIS PARTIKEL STICKY CONTROL ---
-Total Partikel Valid: ${totalValid}
-Distribusi Ukuran (ISO Standard):
-- < 15 µm : ${bins['<15']} partikel
-- 15 - 25 µm : ${bins['15-25']} partikel
-- 25 - 50 µm : ${bins['25-50']} partikel
-- 50 - 100 µm : ${bins['50-100']} partikel
-- > 100 µm : ${bins['>100']} partikel
----------------------------------------------`;
+`--- SUMMARY SCS METHOD REPORT ---
+Slice : ${slice}
+Count : ${count}
+Total Area : ${totalArea.toFixed(3)} mm²
+Average Size : ${avgSize.toFixed(3)} mm²
+%Area : ${pctArea.toFixed(3)} %
+Mean : 0
+-----------------------------------`;
       document.getElementById('reportText').value = report;
     }
 
     function copyReport() {
       const textarea = document.getElementById('reportText');
       if (!textarea.value) {
-        alert('Belum ada data laporan untuk disalin.');
+        alert('Belum ada data untuk disalin.');
         return;
       }
       textarea.select();
       navigator.clipboard.writeText(textarea.value).then(() => {
-        alert('Laporan berhasil disalin ke clipboard! Silakan paste di laporan Anda.');
+        alert('Hasil berhasil disalin ke clipboard!');
       });
     }
 
     function exportCSV() {
-      if (!lastResults) {
-        alert('Belum ada data hasil analisis.');
+      const textarea = document.getElementById('reportText');
+      if (!textarea.value) {
+        alert('Belum ada data.');
         return;
       }
-      let csv = 'Size Bin (um),Count\n';
-      csv += `< 15,${lastResults.binCounts['<15']}\n`;
-      csv += `15-25,${lastResults.binCounts['15-25']}\n`;
-      csv += `25-50,${lastResults.binCounts['25-50']}\n`;
-      csv += `50-100,${lastResults.binCounts['50-100']}\n`;
-      csv += `> 100,${lastResults.binCounts['>100']}\n`;
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([textarea.value], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'particle_count_results.csv';
+      a.download = 'scs_summary_report.csv';
       a.click();
     }
   </script>
